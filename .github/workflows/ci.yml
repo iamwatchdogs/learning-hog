@@ -6,7 +6,7 @@ on:
       - "**/*.py"
       - pyproject.toml
       - uv.lock
-      - ".github/workflows/ci.yaml"
+      - ".github/workflows/ci.yml"
     branches:
       - main
   pull_request:
@@ -14,8 +14,9 @@ on:
       - "**/*.py"
       - pyproject.toml
       - uv.lock
-      - ".github/workflows/ci.yaml"
+      - ".github/workflows/ci.yml"
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
@@ -26,24 +27,31 @@ concurrency:
 
 jobs:
   ci-pipeline:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ["3.13", "3.14"]
 
     steps:
       - name: Check out the repo
         uses: actions/checkout@v7
 
-      - name: Setup uv
-        uses: astral-sh/setup-uv@v10
+      - name: Setup uv with Python ${{ matrix.python-version }}
+        uses: astral-sh/setup-uv@v10.0.0
         with:
           enable-cache: true
-          cache-python: true
+          python-version: ${{ matrix.python-version }}
+          cache-dependency-glob: |
+            uv.lock
+            pyproject.toml
 
       - name: Setup project
-        run: uv sync --locked --all-extras --dev
+        run: uv sync --locked
 
       - parallel:
           - name: Run linting
-            run: uv run ruff check src
+            run: uv run ruff check src tests
 
           - name: Run type checking
             run: uv run ty check src
@@ -51,15 +59,21 @@ jobs:
           - name: Run tests
             run: uv run pytest --cov-report=xml
 
-          - name: Run precommit hook
+          - name: Run precommit hooks
             uses: j178/prek-action@v3.0.0
-            with:
-              extra-args: '--show-diff-on-failure --color=always'
             env:
               SKIP: ruff-check,ruff-format,ty,pytest-testmon,no-commit-to-branch
 
+      # Only upload on pushes to main (direct commits + PR merges land here as
+      # push events). PR runs, tag builds, dispatches, and reusable CD calls skip it.
       - name: Upload coverage to Codecov
+        if: |
+          matrix.os == 'ubuntu-latest' &&
+          matrix.python-version == '3.13' &&
+          github.event_name == 'push' &&
+          github.ref == 'refs/heads/main'
         uses: codecov/codecov-action@v7.0.0
         with:
           files: coverage.xml
           fail_ci_if_error: true
+          token: ${{ secrets.CODECOV_TOKEN }}

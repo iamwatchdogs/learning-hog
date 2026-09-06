@@ -1,0 +1,112 @@
+name: CD
+
+# Flow: CI (reusable workflow call) -parallel- Build artifacts (OS matrix)
+#       -> Publish release.
+# `release` needs both, so a red CI or a failed build skips the release and
+# fails the workflow. Matrix fail-fast (default true) cancels the remaining
+# builds on the first failure.
+#
+# Triggers:
+#   - push of a `v*` tag  -> builds, creates the release if missing, uploads
+#   - `release: published` -> builds and appends artifacts to that release
+#
+# NOTE on attestations: `actions/attest` needs a public repository on
+# Free/Pro/Team plans (private repos need Enterprise Cloud). If this repo is
+# private without Enterprise, the attest step will fail — remove it or make
+# the repo public.
+
+on:
+  push:
+    tags:
+      - "v*"
+  release:
+    types: [published]
+
+permissions:
+  contents: write # create/update releases and upload assets
+  id-token: write # OIDC for attestation signing
+  attestations: write # publish attestations
+
+concurrency:
+  group: cd-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    name: CI (reusable)
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            asset: learning-hog-linux
+          - os: windows-latest
+            asset: learning-hog-windows.exe
+          - os: macos-latest
+            asset: learning-hog-macos
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v7
+
+      # Pin the lowest supported interpreter (3.13) so one binary per OS
+      # covers every supported Python. CI already tests 3.13 + 3.14.
+      - name: Setup uv with Python 3.13
+        uses: astral-sh/setup-uv@v10.0.0
+        with:
+          enable-cache: true
+          cache-python: true
+
+      - name: Setup project
+        run: uv sync --locked
+
+      - name: Build onefile binary with PyInstaller
+        run: >
+          uv run pyinstaller --onefile --clean --noconfirm
+          --name "${{ matrix.asset }}"
+          --paths src
+          src/learning_hog/main.py
+
+      - name: Smoke test the binary
+        shell: bash
+        run: |
+          ./dist/"${{ matrix.asset }}" --help
+          ./dist/"${{ matrix.asset }}" --version
+          ./dist/"${{ matrix.asset }}" find smoke-test
+
+      - name: Attest build provenance
+        uses: actions/attest@v4
+        with:
+          subject-path: dist/${{ matrix.asset }}
+
+      - name: Upload binary as workflow artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.asset }}
+          path: dist/${{ matrix.asset }}
+          if-no-files-found: error
+
+  release:
+    name: Publish to GitHub release
+    needs: [ci, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all binaries
+        uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create or update release and upload assets
+        uses: softprops/action-gh-release@v3
+        with:
+          # Tag push -> creates the release if missing; release event ->
+          # appends to the published release.
+          tag_name: ${{ github.event.release.tag_name || github.ref_name }}
+          files: dist/*
+          generate_release_notes: true

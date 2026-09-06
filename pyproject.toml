@@ -8,13 +8,95 @@ authors = [
 ]
 requires-python = ">=3.13"
 dependencies = [
-    "msgspec>=0.21.1",
+    # --- LLM core (openai-sdk path): parse filters / rerank / summarize via OPENAI_BASE_URL/MODEL/API_KEY ---
+    "openai>=3.8.0",
+
+    # --- LLM helper: token-count for chat in-prompt RAG over path.json ---
+    "tiktoken>=0.14.0",
+
+    # --- HTTP default: all API adapters (GitHub/StackExchange/OCW/books/Reddit/Bluesky/SearXNG) + HEAD validator ---
+    "httpx>=0.28.1",
+
+    # --- Anti-bot fallback: TLS impersonation when httpx gets 403/WAF; pairs with residential proxies ---
+    "curl-cffi>=0.16.3",
+
+    # --- Validation + config: strict local check of LLM JSON; env-based settings ---
+    "pydantic>=2.13.5",
     "pydantic-settings>=2.15.0",
+
+    # --- Fast serialization: cache/*.json 7d TTL + domain structs ---
+    "msgspec>=0.21.1",
+
+    # --- Registry: sources/*.yaml skill files (msgspec.yaml wraps this, still required) ---
+    "pyyaml>=6.0.3",
+
+    # --- CLI/UX: Typer app + Rich tables; prompt-toolkit REPL for `learn chat`; mdurl link handling ---
     "typer>=0.27.2",
+    "prompt-toolkit>=3.0.53",
+    "mdurl>=0.1.2",
+
+    # --- Cache + resilience: cross-OS cache dir; retries/backoff; flexible date parsing for freshness score ---
+    "platformdirs>=4.11.7",
+    "tenacity>=9.1.4",
+    "python-dateutil>=2.9.0.post0",
+    "dateparser>=1.4.3",
+
+    # --- Typed API clients: GitHub search/pagination, Reddit reads, Bluesky posts, YouTube metadata ---
+    "pygithub>=2.10.0",
+    "praw>=8.0.3",
+    "atproto>=0.0.71",
+    "google-api-python-client>=2.200.0",
+
+    # --- Web fallback: Tavily --web search, DuckDuckGo no-key fallback, Apify managed actors ---
+    "tavily-python>=0.8.1",
+    "ddgs>=9.16.0",
+    "apify-client>=3.2.0",
+
+    # --- Transcripts: YouTube captions without API key (needs delays/cache; 429s at scale) ---
+    "youtube-transcript-api>=1.2.4",
+
+    # --- Article extraction: Trafilatura body->Markdown; readability/bs4/lxml fallback chain ---
+    "trafilatura>=2.2.0",
+    "beautifulsoup4>=4.15.0",
+    "lxml>=6.1.3",
+    "readability-lxml>=0.9",
+
+    # --- Targeted parsing: parsel CSS+XPath fields; selectolax fast path when CPU-bound ---
+    "parsel>=1.11.0",
+    "selectolax>=0.4.11",
+
+    # --- Browser/crawler (gated): Playwright JS-render only; nodriver stealth only; Crawlee batch miner only ---
+    "playwright>=1.62.0",
+    "nodriver>=0.50.3",
+    "crawlee>=1.10.0",
+
+    # --- Raw-text processing: fix mojibake/accents, sanitize HTML, domain authority + URL normalize ---
+    "ftfy>=6.3.1",
+    "unidecode>=1.4.0",
+    "bleach>=6.4.0",
+    "tldextract>=5.3.2",
+
+    # --- Dedup + rank: fuzzy titles, MinHash near-dup descriptions, BM25 relevance, EN filter, frame ops ---
+    "rapidfuzz>=3.14.6",
+    "datasketch>=2.0.0",
+    "rank-bm25>=0.2.2",
+    "lingua-language-detector>=2.2.0",
+    "polars>=1.44.1",
+
+    # --- Books: OpenStax/Gutenberg PDF + EPUB -> text for `explain` ---
+    "pypdf>=6.17.0",
+    "ebooklib>=0.20",
 ]
 
 [project.scripts]
 learning-hog = "learning_hog:main"
+
+[project.optional-dependencies]
+social = [
+    # Deferred: direct X/IG scraping needs logins+proxies, breaks often; link-out in V1.
+    "instaloader>=4.15.3",
+    "twikit>=2.3.3",
+]
 
 [build-system]
 requires = ["uv_build>=0.12.6,<0.13.0"]
@@ -22,11 +104,21 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    # Cognitive complexity gate (pre-commit + CI via prek); keeps adapters/ranker refactorable.
+    "complexipy>=8.0.0",
+    "pyinstaller>=6.22.2",
     "pytest>=9.1.1",
+    # Async adapter tests (httpx/crawlee are asyncio-native).
+    "pytest-asyncio>=1.4.0",
     "pytest-cov>=7.1.0",
+    "pytest-mock>=3.15.1",
     "pytest-testmon>=2.2.0",
     "pytest-xdist>=3.8.0",
+    "respx>=0.23.1",
     "ruff>=0.16.6",
+    "syrupy>=6.0.0",
+    # Deterministic freshness/ranking tests (freeze time around published_at).
+    "time-machine>=3.5.0",
     "ty>=0.0.78",
 ]
 
