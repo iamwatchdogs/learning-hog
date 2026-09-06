@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    paths:
+      - "**/*.py"
+      - pyproject.toml
+      - uv.lock
+      - ".github/workflows/ci.yaml"
+    branches:
+      - main
+  pull_request:
+    paths:
+      - "**/*.py"
+      - pyproject.toml
+      - uv.lock
+      - ".github/workflows/ci.yaml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  ci-pipeline:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v7
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v10
+        with:
+          enable-cache: true
+          cache-python: true
+
+      - name: Setup project
+        run: uv sync --locked --all-extras --dev
+
+      - parallel:
+          - name: Run linting
+            run: uv run ruff check src
+
+          - name: Run type checking
+            run: uv run ty check src
+
+          - name: Run tests
+            run: uv run pytest --cov-report=xml
+
+          - name: Run precommit hook
+            uses: j178/prek-action@v3.0.0
+            with:
+              extra-args: '--show-diff-on-failure --color=always'
+            env:
+              SKIP: ruff-check,ruff-format,ty,pytest-testmon,no-commit-to-branch
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v7.0.0
+        with:
+          files: coverage.xml
+          fail_ci_if_error: true
