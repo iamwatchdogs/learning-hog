@@ -211,6 +211,13 @@ tempCodeRunnerFile.py
 # Ruff stuff:
 .ruff_cache/
 
+# Dev Container local artifacts
+.devcontainer/.uv_cache/
+.devcontainer/.venv/
+
+# Complexipy cache
+.complexipy_cache
+
 # PyPI configuration file
 .pypirc
 

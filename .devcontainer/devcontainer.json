@@ -1,0 +1,79 @@
+{
+  "name": "learning-hog",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "..",
+    "args": {
+      "UV_VERSION": "0.8.6",
+      "PYTHON_VERSION": "3.13"
+    }
+  },
+
+  "runArgs": [
+    "--cap-add=SYS_PTRACE",
+    "--security-opt",
+    "seccomp=unconfined"
+  ],
+
+  "containerEnv": {
+    "UV_LINK_MODE": "copy",
+    "UV_COMPILE_BYTECODE": "1",
+    "UV_PROJECT_ENVIRONMENT": "/workspaces/.venv",
+    "PYTHONUNBUFFERED": "1"
+  },
+
+  "postCreateCommand": "bash ./.devcontainer/post-install.sh",
+
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {
+      "version": "latest",
+      "configureUser": true
+    }
+  },
+
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "python.defaultInterpreterPath": "/workspaces/.venv/bin/python",
+        "python.terminal.activateEnvironment": false,
+        "ruff.checkOnSave": true,
+        "ruff.checkOnSaveMode": "all",
+        "ruff.formatOnSave": true,
+        "ruff.workingDirectories": ["${workspaceFolder}"],
+        "ty.enabled": true,
+        "ty.path": "/workspaces/.venv/bin/ty",
+        "ty.disableLanguageServices": true,
+        "python.languageServer": "Pylance",
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+          "source.fixAll": "explicit",
+          "source.organizeImports": "explicit"
+        },
+        "editor.rulers": [88],
+        "python.testing.pytestEnabled": true,
+        "python.testing.pytestPath": "/workspaces/.venv/bin/pytest",
+        "files.autoSave": "afterDelay",
+        "python.analysis.typeCheckingMode": "strict",
+        "editor.wordWrap": "on"
+      },
+      "extensions": [
+        "ms-python.python",
+        "ms-python.debugpy",
+        "ms-python.vscode-pylance",
+        "njpwerner.autodocstring",
+        "PKief.material-icon-theme",
+        "DavidAnson.vscode-markdownlint",
+        "charliermarsh.ruff",
+        "astral-sh.ty",
+        "github.vscode-github-actions",
+        "redhat.vscode-yaml",
+        "tamasfe.even-better-toml",
+        "ryanluker.vscode-coverage-gutters",
+        "mhutchie.git-graph"
+      ]
+    }
+  },
+
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/${localWorkspaceFolderBasename},type=bind,consistency=cached"
+}
