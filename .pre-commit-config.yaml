@@ -67,6 +67,12 @@ repos:
         name: "hygiene protect main branch"
         args: [--branch, main]
 
+  - repo: https://github.com/DavidAnson/markdownlint-cli2
+    rev: v0.23.2
+    hooks:
+      - id: markdownlint-cli2
+        name: "lint markdown"
+
   - repo: local
     hooks:
       - id: pytest-testmon
