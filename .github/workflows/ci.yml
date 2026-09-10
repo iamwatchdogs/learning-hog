@@ -2,46 +2,131 @@ name: CI
 
 on:
   push:
-    paths:
-      - "**/*.py"
-      - pyproject.toml
-      - uv.lock
-      - ".github/workflows/ci.yml"
     branches:
       - main
   pull_request:
-    paths:
-      - "**/*.py"
-      - pyproject.toml
-      - uv.lock
-      - ".github/workflows/ci.yml"
   workflow_dispatch:
   workflow_call:
+    inputs:
+      run-all:
+        description: "Force all jobs (release gate); bypasses path filtering"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  group: ci-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
 jobs:
-  ci-pipeline:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: ["3.13", "3.14"]
+  detect-changes:
+    name: Detect changes
+
+    # since all jobs are required to run, filtering is unnecessary here
+    if: ${{ !inputs.run-all }}
+
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read      # actions/checkout on push / workflow_dispatch / workflow_call
+      pull-requests: read # dorny/paths-filter PR file listing via REST API
+
+    outputs:
+      python: ${{ steps.filter.outputs.python }}
+      docs: ${{ steps.filter.outputs.docs }}
+      workflows: ${{ steps.filter.outputs.workflows }}
+
+    steps:
+      # paths-filter uses the GitHub API on pull requests, so no checkout is needed there.
+      - name: Check out the repo
+        if: github.event_name != 'pull_request'
+        uses: actions/checkout@v7
+
+      - name: Detect changed areas
+        uses: dorny/paths-filter@v4.0.3
+        id: filter
+        with:
+          filters: |
+            python:
+              - 'src/**/*.py'
+              - 'tests/**/*.py'
+              - 'pyproject.toml'
+              - 'uv.lock'
+            docs:
+              - '**/*.md'
+              - '.markdownlint-cli2.jsonc'
+            workflows:
+              - '.github/workflows/*.yml'
+              - '.github/workflows/*.yaml'
+
+  lint-markdown-docs:
+    needs: [detect-changes]
+    # Status guards stay outermost so a failed/cancelled run is never kept
+    # alive by the run-all short-circuit (which would resist cancellation).
+    if: |
+      (inputs.run-all ||
+      needs.detect-changes.outputs.docs == 'true') &&
+      !failure() &&
+      !cancelled()
+
+    name: Lint markdown
+    runs-on: ubuntu-latest
 
     steps:
       - name: Check out the repo
         uses: actions/checkout@v7
 
-      - name: Setup uv with Python ${{ matrix.python-version }}
-        uses: astral-sh/setup-uv@v10.0.0
+      - name: Run markdownlint-cli2
+        uses: DavidAnson/markdownlint-cli2-action@v24.2.0
+        with:
+          globs: |
+            **/*.md
+            #node_modules
+
+  lint-gh-workflows:
+    needs: [detect-changes]
+    if: |
+      (inputs.run-all ||
+      needs.detect-changes.outputs.workflows == 'true') &&
+      !failure() &&
+      !cancelled()
+
+    name: Lint GH Action workflows
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github
+
+      # Added `-ignore` option since parallel step block is not yet supported by actionlint
+      - name: Run actionlint
+        uses: raven-actions/actionlint@v2
+        with:
+          flags: '-ignore "step must run script with \"run\" section or run action with \"uses\" section"'
+
+  precheck-ci-pipeline:
+    needs: [detect-changes]
+    if: |
+      (inputs.run-all ||
+      needs.detect-changes.outputs.python == 'true') &&
+      !failure() &&
+      !cancelled()
+
+    name: Lint Python
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v7
+
+      - name: Setup uv with Python
+        uses: astral-sh/setup-uv@v10.0.1
         with:
           enable-cache: true
-          python-version: ${{ matrix.python-version }}
           cache-dependency-glob: |
             uv.lock
             pyproject.toml
@@ -56,24 +141,142 @@ jobs:
           - name: Run type checking
             run: uv run ty check src
 
-          - name: Run tests
-            run: uv run pytest --cov-report=xml
-
           - name: Run precommit hooks
             uses: j178/prek-action@v3.0.0
             env:
-              SKIP: ruff-check,ruff-format,ty,pytest-testmon,no-commit-to-branch
+              SKIP: ruff-check,ruff-format,ty,pytest-testmon,no-commit-to-branch,markdownlint-cli2,actionlint
 
-      # Only upload on pushes to main (direct commits + PR merges land here as
-      # push events). PR runs, tag builds, dispatches, and reusable CD calls skip it.
+  test-matrix-pipeline:
+    needs: [detect-changes]
+    if: |
+      (inputs.run-all ||
+      needs.detect-changes.outputs.python == 'true') &&
+      !failure() &&
+      !cancelled()
+
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ["3.13", "3.14"]
+
+    name: Test CI (Python ${{ matrix.python-version }} on ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+
+    env:
+      IS_COVERAGE_RUN: >-
+        ${{ matrix.os == 'ubuntu-latest' &&
+        matrix.python-version == '3.13' &&
+        github.event_name == 'push' &&
+        github.ref == 'refs/heads/main' }}
+
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v7
+
+      - name: Setup uv with Python ${{ matrix.python-version }}
+        uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+          python-version: ${{ matrix.python-version }}
+          cache-dependency-glob: |
+            uv.lock
+            pyproject.toml
+
+      - name: Setup project
+        run: uv sync --locked
+
+      - name: Run tests with coverage
+        if: env.IS_COVERAGE_RUN == 'true'
+        run: uv run pytest --cov-report=xml
+
+      - name: Run tests
+        if: env.IS_COVERAGE_RUN != 'true'
+        run: uv run pytest --no-cov
+
       - name: Upload coverage to Codecov
-        if: |
-          matrix.os == 'ubuntu-latest' &&
-          matrix.python-version == '3.13' &&
-          github.event_name == 'push' &&
-          github.ref == 'refs/heads/main'
+        if: env.IS_COVERAGE_RUN == 'true'
         uses: codecov/codecov-action@v7.0.0
         with:
           files: coverage.xml
           fail_ci_if_error: true
           token: ${{ secrets.CODECOV_TOKEN }}
+
+  # Single required status check for branch rulesets, replacing per-job
+  # required checks. Succeeds only when every applicable job succeeded.
+  #
+  # Uses `if: always()` because GitHub treats "skipped" as success for
+  # required checks. Without it, a cancelled run would show this gate as
+  # "skipped" (i.e. passed), letting broken code merge.
+  #
+  # Fail-closed logic: a skipped job passes only when detect-changes
+  # explicitly reported its filter as "false" (meaning it legitimately
+  # didn't apply). A job skipped without that provenance — e.g. because the
+  # run was cancelled before it started — fails the gate. This closes the
+  # GitHub runner bug where cancelled runs leave never-started jobs as
+  # "skipped" instead of "cancelled" (docs: actions/runner#3041).
+  #
+  # Branch ruleset: require the check named "All checks passed".
+  ci-status-checker:
+    name: CI Status
+
+    needs:
+      - detect-changes
+      - lint-markdown-docs
+      - lint-gh-workflows
+      - precheck-ci-pipeline
+      - test-matrix-pipeline
+    if: ${{ always() }}
+
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Fail unless every applicable job succeeded
+        env:
+          DETECT_CHANGES_RESULT: ${{ needs.detect-changes.result }}
+          DOCS_FILTER: ${{ needs.detect-changes.outputs.docs }}
+          WORKFLOWS_FILTER: ${{ needs.detect-changes.outputs.workflows }}
+          PYTHON_FILTER: ${{ needs.detect-changes.outputs.python }}
+          LINT_MARKDOWN_DOCS_RESULT: ${{ needs.lint-markdown-docs.result }}
+          LINT_WORKFLOWS_RESULT: ${{ needs.lint-gh-workflows.result }}
+          PRECHECK_CI_PIPELINE_RESULT: ${{ needs.precheck-ci-pipeline.result }}
+          TEST_MATRIX_PIPELINE_RESULT: ${{ needs.test-matrix-pipeline.result }}
+        run: |
+          failed=''
+
+          # allow(): $1 = filter output from detect-changes, $2 = job result.
+          # Pass if succeeded, or skipped with explicit "false" filter provenance.
+          allow() {
+            [ "$2" = success ] && return 0
+            [ "$2" = skipped ] && [ "$1" = false ] && return 0
+            return 1
+          }
+
+          # detect-changes: "skipped" only happens when run-all forces all jobs.
+          case "$DETECT_CHANGES_RESULT" in
+            success|skipped) printf '✅ Detect changes: %s\n' "$DETECT_CHANGES_RESULT" ;;
+            *) printf '❌ Detect changes: %s\n' "$DETECT_CHANGES_RESULT"; failed=1 ;;
+          esac
+
+          allow "$DOCS_FILTER" "$LINT_MARKDOWN_DOCS_RESULT" \
+            && printf '✅ Lint markdown: %s\n' "$LINT_MARKDOWN_DOCS_RESULT" \
+            || { printf '❌ Lint markdown: %s (filter: %s)\n' "$LINT_MARKDOWN_DOCS_RESULT" "$DOCS_FILTER"; failed=1; }
+
+          allow "$WORKFLOWS_FILTER" "$LINT_WORKFLOWS_RESULT" \
+            && printf '✅ Lint workflows: %s\n' "$LINT_WORKFLOWS_RESULT" \
+            || { printf '❌ Lint workflows: %s (filter: %s)\n' "$LINT_WORKFLOWS_RESULT" "$WORKFLOWS_FILTER"; failed=1; }
+
+          allow "$PYTHON_FILTER" "$PRECHECK_CI_PIPELINE_RESULT" \
+            && printf '✅ Lint Python: %s\n' "$PRECHECK_CI_PIPELINE_RESULT" \
+            || { printf '❌ Lint Python: %s (filter: %s)\n' "$PRECHECK_CI_PIPELINE_RESULT" "$PYTHON_FILTER"; failed=1; }
+
+          allow "$PYTHON_FILTER" "$TEST_MATRIX_PIPELINE_RESULT" \
+            && printf '✅ Test CI (matrix): %s\n' "$TEST_MATRIX_PIPELINE_RESULT" \
+            || { printf '❌ Test CI (matrix): %s (filter: %s)\n' "$TEST_MATRIX_PIPELINE_RESULT" "$PYTHON_FILTER"; failed=1; }
+
+          if [ -n "$failed" ]; then
+            echo "::error::One or more CI jobs did not succeed (or the run was cancelled); see the results above."
+            exit 1
+          fi
+
+          echo "All applicable CI jobs succeeded."

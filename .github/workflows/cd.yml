@@ -23,9 +23,7 @@ on:
     types: [published]
 
 permissions:
-  contents: write # create/update releases and upload assets
-  id-token: write # OIDC for attestation signing
-  attestations: write # publish attestations
+  contents: read
 
 concurrency:
   group: cd-${{ github.ref }}
@@ -36,11 +34,17 @@ jobs:
     name: CI (reusable)
     permissions:
       contents: read
+    with:
+      run-all: true
     uses: ./.github/workflows/ci.yml
 
   build:
     name: Build (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read      # checkout
+      id-token: write     # OIDC for attestation signing
+      attestations: write # publish attestations
     strategy:
       matrix:
         include:
@@ -54,10 +58,8 @@ jobs:
       - name: Check out the repo
         uses: actions/checkout@v7
 
-      # Pin the lowest supported interpreter (3.13) so one binary per OS
-      # covers every supported Python. CI already tests 3.13 + 3.14.
       - name: Setup uv with Python 3.13
-        uses: astral-sh/setup-uv@v10.0.0
+        uses: astral-sh/setup-uv@v10.0.1
         with:
           enable-cache: true
           cache-python: true
@@ -95,6 +97,8 @@ jobs:
     name: Publish to GitHub release
     needs: [ci, build]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Download all binaries
         uses: actions/download-artifact@v8
