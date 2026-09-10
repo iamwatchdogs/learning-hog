@@ -66,6 +66,7 @@
         "charliermarsh.ruff",
         "astral-sh.ty",
         "github.vscode-github-actions",
+        "jimeh.actionlint",
         "redhat.vscode-yaml",
         "tamasfe.even-better-toml",
         "ryanluker.vscode-coverage-gutters",
