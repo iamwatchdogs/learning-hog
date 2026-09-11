@@ -13,14 +13,36 @@ mkdir -p /workspaces/.uv_cache
 # The `jimeh.actionlint` VS Code extension needs it on PATH; `prek run` uses
 # the prek-managed copy, so this is for editor feedback and manual runs.
 echo "⚙️ Installing actionlint..."
-# Installer URL pinned to a reviewed commit of rhysd/actionlint main
-# (011a6d15e749bb3f2d771eed9c7aa0e7e3e10ee7) so the post-create step never
-# executes mutable branch source; the script itself downloads the pinned
-# release 1.7.12.
+# Pinned to actionlint 1.7.12 release artifacts with SHA256 verification.
+# This avoids the `bash <(curl ...)` / `curl | bash` download-then-run pattern
+# flagged by OSSF Scorecard Pinned-Dependencies (use a file download, verify
+# the hash, then extract locally instead of executing remote code).
+# Checksums from https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_checksums.txt
+ACTIONLINT_VERSION="1.7.12"
+ACTIONLINT_TMPDIR="$(mktemp -d)"
+# EXIT fires on all shell exits (success, `set -e` failure, INT/TERM), so the
+# temp dir is removed even if curl/sha256sum/tar/install fails midway. Single
+# EXIT trap only — adding INT/TERM alongside would run cleanup twice.
+trap 'rm -rf -- "${ACTIONLINT_TMPDIR:-}"' EXIT
+case "$(uname -m)" in
+    x86_64) ACTIONLINT_ARCH="amd64"; ACTIONLINT_SHA256="8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8" ;;
+    aarch64|arm64) ACTIONLINT_ARCH="arm64"; ACTIONLINT_SHA256="325e971b6ba9bfa504672e29be93c24981eeb1c07576d730e9f7c8805afff0c6" ;;
+    *)
+        echo "Unsupported architecture '$(uname -m)' for actionlint install" >&2
+        exit 1
+        ;;
+esac
+ACTIONLINT_TARBALL="${ACTIONLINT_TMPDIR}/actionlint.tar.gz"
 # --fail: curl's own docs -- raw HTTP errors must exit non-zero; without it a
-# 4xx/5xx body would be piped into bash (and process substitution runs
-# asynchronously, so `set -e` cannot catch curl failures).
-bash <(curl --fail --location --silent --show-error https://raw.githubusercontent.com/rhysd/actionlint/011a6d15e749bb3f2d771eed9c7aa0e7e3e10ee7/scripts/download-actionlint.bash) 1.7.12 /usr/local/bin
+# 4xx/5xx body would be written to the tarball instead of failing fast.
+curl --fail --location --silent --show-error \
+    -o "${ACTIONLINT_TARBALL}" \
+    "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_${ACTIONLINT_ARCH}.tar.gz"
+echo "${ACTIONLINT_SHA256}  ${ACTIONLINT_TARBALL}" | sha256sum --check -
+tar -xzf "${ACTIONLINT_TARBALL}" -C "${ACTIONLINT_TMPDIR}" actionlint
+install -m 0755 "${ACTIONLINT_TMPDIR}/actionlint" /usr/local/bin/actionlint
+trap - EXIT
+rm -rf -- "${ACTIONLINT_TMPDIR}"
 
 # Install prek (pre-commit runner) - used for running pre-commit hooks
 # The project uses prek in CI via j178/prek-action

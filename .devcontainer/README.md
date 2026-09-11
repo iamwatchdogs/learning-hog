@@ -83,6 +83,9 @@ uv run complexipy src --max-complexity-allowed 15
 # Run pre-commit hooks (via prek)
 prek run --all-files
 
+# Run the pre-push security gate (zizmor + osv-scanner + gitleaks)
+prek run --hook-stage pre-push --all-files
+
 # Lint all markdown files (same rules as pre-commit and CI)
 prek run markdownlint-cli2 --all-files
 
@@ -191,6 +194,42 @@ From [ripgrep benchmarks](https://github.com/BurntSushi/ripgrep):
 
 This project uses **prek** (a fast, Rust-based pre-commit hook runner) instead
 of the traditional `pre-commit` tool.
+
+### Two-stage hooks: commit-time speed, push-time security
+
+Hooks are split across two git stages (see `default_install_hook_types` and
+`default_stages` in `.pre-commit-config.yaml`):
+
+- **`pre-commit`** (every commit): formatting, linting, type checking,
+  complexity gate, markdown/workflow linting, tests on changed files, and a
+  private-key detector (`detect-private-key`).
+- **`pre-push`** (every push): the security gate —
+  - **zizmor** — GitHub Actions security analysis (offline mode), blocking on
+    medium+ severity findings,
+  - **osv-scanner** — dependency vulnerability scan (same OSV database as
+    GitHub's dependency review),
+  - **gitleaks** — secret scan of the full git history, so secrets that were
+    committed with hooks skipped are still blocked before they leave the
+    machine.
+
+After cloning (or rebuilding the container), enable both stages:
+
+```bash
+prek install
+```
+
+> ⚠️ Hooks only run if you have installed them. `prek install` writes the git
+> shims for both stages; without it, no local checks fire on commit or push.
+> Consider adding `prek install` to `.devcontainer/post-install.sh`.
+
+### Skipping a hook (escape hatch)
+
+Use the `SKIP` environment variable with a comma-separated list of hook ids —
+never bypass a whole stage with `--no-verify`:
+
+```bash
+SKIP=zizmor,osv-scanner,gitleaks git push
+```
 
 ### What is prek?
 
