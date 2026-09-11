@@ -19,17 +19,16 @@ permissions:
   contents: read
 
 concurrency:
-  # Scheduled runs are exempt from cancellation (see codeql.yml).
-  group: scorecard-${{ github.ref }}
+  # Scheduled runs get their own group (see codeql.yml): cancel-in-progress is
+  # evaluated on the arriving run, so a shared group would let a push or
+  # branch-protection event kill the weekly scan.
+  group: scorecard-${{ github.ref }}${{ github.event_name == 'schedule' && '-scheduled' || '' }}
   cancel-in-progress: ${{ github.event_name != 'schedule' }}
 
 jobs:
   analysis:
     name: Scorecard analysis
     runs-on: ubuntu-latest
-
-    # Publishing only works from the default branch.
-    if: github.event.repository.default_branch == github.ref_name
 
     permissions:
       contents: read                  # checkout
@@ -48,9 +47,14 @@ jobs:
         with:
           results_file: results.sarif
           results_format: sarif
+
           # Uncomment for the classic Branch-Protection check (public) or any private repo.
           # repo_token: ${{ secrets.SCORECARD_TOKEN }}
-          publish_results: true
+
+          # Publishing only works from the default branch: the publish API
+          # rejects results from other refs, so PR runs analyze and upload
+          # SARIF only (results show as PR annotations).
+          publish_results: ${{ github.event_name != 'pull_request' }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

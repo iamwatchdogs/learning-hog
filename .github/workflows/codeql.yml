@@ -20,9 +20,10 @@ permissions:
   contents: read
 
 concurrency:
-  # Scheduled runs are exempt from cancellation so a push can't silently kill
-  # the weekly full-query scan (the push rescans main anyway).
-  group: codeql-${{ github.ref }}
+  # Scheduled runs get their own group: cancel-in-progress is evaluated on the
+  # arriving run, so a shared group would let a push kill the weekly scan.
+  # Push/PR runs keep sharing a group and canceling superseded runs.
+  group: codeql-${{ github.ref }}${{ github.event_name == 'schedule' && '-scheduled' || '' }}
   cancel-in-progress: ${{ github.event_name != 'schedule' }}
 
 jobs:
