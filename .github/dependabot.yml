@@ -3,6 +3,10 @@
 # Dependabot updates the SHA and the trailing "# vX.Y.Z" comment together.
 # See https://docs.github.com/en/code-security/dependabot/working-with-dependabot/keeping-your-actions-up-to-date-with-dependabot
 #
+# The `docker` entry repins the devcontainer base image digest in
+# .devcontainer/Dockerfile whenever a new multi-arch manifest list digest is
+# published for the pinned tag, keeping the digest pin from going stale.
+#
 # The `uv` entry keeps uv.lock fresh (verified: Dependabot supports the `uv`
 # package-ecosystem; see https://docs.astral.sh/uv/guides/integration/dependabot/).
 # `cooldown.default-days: 7` delays version-update PRs until a release is a
@@ -33,3 +37,9 @@ updates:
       uv:
         patterns:
           - "*"
+  - package-ecosystem: docker
+    directory: /.devcontainer
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7

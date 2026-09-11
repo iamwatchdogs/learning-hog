@@ -2,11 +2,7 @@
   "name": "learning-hog",
   "build": {
     "dockerfile": "Dockerfile",
-    "context": "..",
-    "args": {
-      "UV_VERSION": "0.8.6",
-      "PYTHON_VERSION": "3.13"
-    }
+    "context": ".."
   },
 
   "runArgs": [
