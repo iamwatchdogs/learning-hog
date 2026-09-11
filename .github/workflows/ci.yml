@@ -56,12 +56,14 @@ jobs:
               - 'tests/**/*.py'
               - 'pyproject.toml'
               - 'uv.lock'
+              - '.pre-commit-config.yaml'
             docs:
               - '**/*.md'
               - '.markdownlint-cli2.jsonc'
             workflows:
               - '.github/workflows/*.yml'
               - '.github/workflows/*.yaml'
+              - '.github/actionlint.yaml'
 
   lint-markdown-docs:
     needs: [detect-changes]

@@ -2,13 +2,34 @@
 # Actions are pinned to full-length commit SHAs (supply-chain hardening);
 # Dependabot updates the SHA and the trailing "# vX.Y.Z" comment together.
 # See https://docs.github.com/en/code-security/dependabot/working-with-dependabot/keeping-your-actions-up-to-date-with-dependabot
+#
+# The `uv` entry keeps uv.lock fresh (verified: Dependabot supports the `uv`
+# package-ecosystem; see https://docs.astral.sh/uv/guides/integration/dependabot/).
+# `cooldown.default-days: 7` delays version-update PRs until a release is a
+# week old, reducing the chance of ingesting a freshly compromised release.
+# Security updates are never delayed by cooldown.
 version: 2
 updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    # Same 7-day stance as `uv` below: version-update PRs wait until a release
+    # is a week old. (The platform already applies a 3-day default; this makes
+    # the 7-day intent explicit. Security updates are never delayed.)
+    cooldown:
+      default-days: 7
     groups:
       github-actions:
+        patterns:
+          - "*"
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      uv:
         patterns:
           - "*"

@@ -13,7 +13,14 @@ mkdir -p /workspaces/.uv_cache
 # The `jimeh.actionlint` VS Code extension needs it on PATH; `prek run` uses
 # the prek-managed copy, so this is for editor feedback and manual runs.
 echo "⚙️ Installing actionlint..."
-bash <(curl https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash) 1.7.12 /usr/local/bin
+# Installer URL pinned to a reviewed commit of rhysd/actionlint main
+# (011a6d15e749bb3f2d771eed9c7aa0e7e3e10ee7) so the post-create step never
+# executes mutable branch source; the script itself downloads the pinned
+# release 1.7.12.
+# --fail: curl's own docs -- raw HTTP errors must exit non-zero; without it a
+# 4xx/5xx body would be piped into bash (and process substitution runs
+# asynchronously, so `set -e` cannot catch curl failures).
+bash <(curl --fail --location --silent --show-error https://raw.githubusercontent.com/rhysd/actionlint/011a6d15e749bb3f2d771eed9c7aa0e7e3e10ee7/scripts/download-actionlint.bash) 1.7.12 /usr/local/bin
 
 # Install prek (pre-commit runner) - used for running pre-commit hooks
 # The project uses prek in CI via j178/prek-action

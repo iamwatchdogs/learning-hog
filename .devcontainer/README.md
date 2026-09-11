@@ -84,7 +84,7 @@ uv run complexipy src --max-complexity-allowed 15
 prek run --all-files
 
 # Lint all markdown files (same rules as pre-commit and CI)
-uvx --from markdownlint-cli2 markdownlint-cli2 "**/*.md"
+prek run markdownlint-cli2 --all-files
 
 # Lint GitHub Actions workflows
 actionlint

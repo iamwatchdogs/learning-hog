@@ -8,7 +8,10 @@ paths:
   # The `parallel:` steps syntax (GA on 2026-06-25) is not yet supported by
   # actionlint v1.7.x, which misparses it as:
   #   step must run script with "run" section or run action with "uses" section
-  # Drop this ignore once actionlint gains support for parallel steps.
-  '.github/workflows/*.{yml,yaml}':
+  # Only ci.yml uses `parallel:` steps; scoping the ignore to it keeps full
+  # validation (e.g. malformed run/uses steps) for cd.yml and any other
+  # workflow added later. Drop this ignore once actionlint gains support for
+  # parallel steps.
+  '.github/workflows/ci.yml':
     ignore:
       - 'step must run script with "run" section or run action with "uses" section'
