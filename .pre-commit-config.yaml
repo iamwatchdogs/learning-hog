@@ -73,15 +73,13 @@ repos:
       - id: markdownlint-cli2
         name: "lint markdown"
 
-  # Added `-ignore` option since parallel step block is not yet supported by actionlint
+  # Ignore rules for the not-yet-supported `parallel:` steps syntax live in
+  # .github/actionlint.yaml so local pre-commit and CI behave identically.
   - repo: https://github.com/rhysd/actionlint
     rev: v1.7.12
     hooks:
       - id: actionlint
         name: "lint github actions workflows"
-        args:
-          - -ignore
-          - 'step must run script with "run" section or run action with "uses" section'
 
   - repo: local
     hooks:

@@ -14,6 +14,19 @@ name: CD
 # Free/Pro/Team plans (private repos need Enterprise Cloud). If this repo is
 # private without Enterprise, the attest step will fail — remove it or make
 # the repo public.
+#
+# NOTE on triggering: pushing a `v*` tag and then publishing the GitHub
+# release both fire this workflow, and both events resolve to the same
+# `refs/tags/vX` ref, so the `cd-` concurrency group below serializes the two
+# runs. Both runs publish: assets have identical digests, and softprops'
+# default `overwrite_files: true` makes the second upload an idempotent
+# overwrite. This keeps releases working for tags pushed before this workflow
+# existed (only the `release: published` event fires in that case).
+#
+# NOTE on caching: release builds deliberately restore nothing from the
+# Actions cache (setup-uv's `auto` default disables it on tag-push/release
+# events). Poisoned cache entries must never be able to influence a release
+# artifact (zizmor: cache-poisoning).
 
 on:
   push:
@@ -41,10 +54,12 @@ jobs:
   build:
     name: Build (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     permissions:
-      contents: read      # checkout
-      id-token: write     # OIDC for attestation signing
-      attestations: write # publish attestations
+      contents: read           # checkout
+      id-token: write          # OIDC for attestation signing
+      attestations: write      # publish attestations
+      artifact-metadata: write # attest artifact storage record
     strategy:
       matrix:
         include:
@@ -56,13 +71,18 @@ jobs:
             asset: learning-hog-macos
     steps:
       - name: Check out the repo
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       - name: Setup uv with Python 3.13
-        uses: astral-sh/setup-uv@v10.0.1
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
-          enable-cache: true
-          cache-python: true
+          # Release builds must not restore Actions-cache state (see the
+          # caching note in the header); this is also setup-uv's `auto`
+          # default for tag-push and release events.
+          enable-cache: false
+          cache-python: false
 
       - name: Setup project
         run: uv sync --locked
@@ -82,12 +102,12 @@ jobs:
           ./dist/"${{ matrix.asset }}" find smoke-test
 
       - name: Attest build provenance
-        uses: actions/attest@v4
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
         with:
           subject-path: dist/${{ matrix.asset }}
 
       - name: Upload binary as workflow artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: ${{ matrix.asset }}
           path: dist/${{ matrix.asset }}
@@ -97,17 +117,18 @@ jobs:
     name: Publish to GitHub release
     needs: [ci, build]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: write
     steps:
       - name: Download all binaries
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           path: dist
           merge-multiple: true
 
       - name: Create or update release and upload assets
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
         with:
           # Tag push -> creates the release if missing; release event ->
           # appends to the published release.

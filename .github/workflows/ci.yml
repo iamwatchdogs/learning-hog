@@ -42,10 +42,12 @@ jobs:
       # paths-filter uses the GitHub API on pull requests, so no checkout is needed there.
       - name: Check out the repo
         if: github.event_name != 'pull_request'
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       - name: Detect changed areas
-        uses: dorny/paths-filter@v4.0.3
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
         with:
           filters: |
@@ -76,10 +78,12 @@ jobs:
 
     steps:
       - name: Check out the repo
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       - name: Run markdownlint-cli2
-        uses: DavidAnson/markdownlint-cli2-action@v24.2.0
+        uses: DavidAnson/markdownlint-cli2-action@21c1be1b93ad9ed58fa840aacc3f279cde2a72ff # v24.2.0
         with:
           globs: |
             **/*.md
@@ -98,15 +102,19 @@ jobs:
 
     steps:
       - name: Check out the repo
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           sparse-checkout: .github
+          persist-credentials: false
 
-      # Added `-ignore` option since parallel step block is not yet supported by actionlint
+      # The `parallel:` steps syntax is not yet supported by actionlint; the
+      # ignore rule lives in .github/actionlint.yaml so that local pre-commit
+      # and this job filter errors identically. Version is pinned to match the
+      # actionlint rev in .pre-commit-config.yaml.
       - name: Run actionlint
-        uses: raven-actions/actionlint@v2
+        uses: raven-actions/actionlint@3d39aea434753780c3b3d4a1a31c854b4dbf49d7 # v2
         with:
-          flags: '-ignore "step must run script with \"run\" section or run action with \"uses\" section"'
+          version: v1.7.12
 
   precheck-ci-pipeline:
     needs: [detect-changes]
@@ -121,10 +129,12 @@ jobs:
 
     steps:
       - name: Check out the repo
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       - name: Setup uv with Python
-        uses: astral-sh/setup-uv@v10.0.1
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           enable-cache: true
           cache-dependency-glob: |
@@ -142,7 +152,7 @@ jobs:
             run: uv run ty check src
 
           - name: Run precommit hooks
-            uses: j178/prek-action@v3.0.0
+            uses: j178/prek-action@4e14d07f9231acabce116ccfca13b13dd9755ece # v3.0.0
             env:
               SKIP: ruff-check,ruff-format,ty,pytest-testmon,no-commit-to-branch,markdownlint-cli2,actionlint
 
@@ -161,6 +171,7 @@ jobs:
 
     name: Test CI (Python ${{ matrix.python-version }} on ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
 
     env:
       IS_COVERAGE_RUN: >-
@@ -171,10 +182,12 @@ jobs:
 
     steps:
       - name: Check out the repo
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       - name: Setup uv with Python ${{ matrix.python-version }}
-        uses: astral-sh/setup-uv@v10.0.1
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           enable-cache: true
           python-version: ${{ matrix.python-version }}
@@ -195,7 +208,7 @@ jobs:
 
       - name: Upload coverage to Codecov
         if: env.IS_COVERAGE_RUN == 'true'
-        uses: codecov/codecov-action@v7.0.0
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           files: coverage.xml
           fail_ci_if_error: true
@@ -258,21 +271,33 @@ jobs:
             *) printf '❌ Detect changes: %s\n' "$DETECT_CHANGES_RESULT"; failed=1 ;;
           esac
 
-          allow "$DOCS_FILTER" "$LINT_MARKDOWN_DOCS_RESULT" \
-            && printf '✅ Lint markdown: %s\n' "$LINT_MARKDOWN_DOCS_RESULT" \
-            || { printf '❌ Lint markdown: %s (filter: %s)\n' "$LINT_MARKDOWN_DOCS_RESULT" "$DOCS_FILTER"; failed=1; }
+          if allow "$DOCS_FILTER" "$LINT_MARKDOWN_DOCS_RESULT"; then
+            printf '✅ Lint markdown: %s\n' "$LINT_MARKDOWN_DOCS_RESULT"
+          else
+            printf '❌ Lint markdown: %s (filter: %s)\n' "$LINT_MARKDOWN_DOCS_RESULT" "$DOCS_FILTER"
+            failed=1
+          fi
 
-          allow "$WORKFLOWS_FILTER" "$LINT_WORKFLOWS_RESULT" \
-            && printf '✅ Lint workflows: %s\n' "$LINT_WORKFLOWS_RESULT" \
-            || { printf '❌ Lint workflows: %s (filter: %s)\n' "$LINT_WORKFLOWS_RESULT" "$WORKFLOWS_FILTER"; failed=1; }
+          if allow "$WORKFLOWS_FILTER" "$LINT_WORKFLOWS_RESULT"; then
+            printf '✅ Lint workflows: %s\n' "$LINT_WORKFLOWS_RESULT"
+          else
+            printf '❌ Lint workflows: %s (filter: %s)\n' "$LINT_WORKFLOWS_RESULT" "$WORKFLOWS_FILTER"
+            failed=1
+          fi
 
-          allow "$PYTHON_FILTER" "$PRECHECK_CI_PIPELINE_RESULT" \
-            && printf '✅ Lint Python: %s\n' "$PRECHECK_CI_PIPELINE_RESULT" \
-            || { printf '❌ Lint Python: %s (filter: %s)\n' "$PRECHECK_CI_PIPELINE_RESULT" "$PYTHON_FILTER"; failed=1; }
+          if allow "$PYTHON_FILTER" "$PRECHECK_CI_PIPELINE_RESULT"; then
+            printf '✅ Lint Python: %s\n' "$PRECHECK_CI_PIPELINE_RESULT"
+          else
+            printf '❌ Lint Python: %s (filter: %s)\n' "$PRECHECK_CI_PIPELINE_RESULT" "$PYTHON_FILTER"
+            failed=1
+          fi
 
-          allow "$PYTHON_FILTER" "$TEST_MATRIX_PIPELINE_RESULT" \
-            && printf '✅ Test CI (matrix): %s\n' "$TEST_MATRIX_PIPELINE_RESULT" \
-            || { printf '❌ Test CI (matrix): %s (filter: %s)\n' "$TEST_MATRIX_PIPELINE_RESULT" "$PYTHON_FILTER"; failed=1; }
+          if allow "$PYTHON_FILTER" "$TEST_MATRIX_PIPELINE_RESULT"; then
+            printf '✅ Test CI (matrix): %s\n' "$TEST_MATRIX_PIPELINE_RESULT"
+          else
+            printf '❌ Test CI (matrix): %s (filter: %s)\n' "$TEST_MATRIX_PIPELINE_RESULT" "$PYTHON_FILTER"
+            failed=1
+          fi
 
           if [ -n "$failed" ]; then
             echo "::error::One or more CI jobs did not succeed (or the run was cancelled); see the results above."

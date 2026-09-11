@@ -1,0 +1,14 @@
+# Keeps the third-party action pins in .github/workflows/ up to date.
+# Actions are pinned to full-length commit SHAs (supply-chain hardening);
+# Dependabot updates the SHA and the trailing "# vX.Y.Z" comment together.
+# See https://docs.github.com/en/code-security/dependabot/working-with-dependabot/keeping-your-actions-up-to-date-with-dependabot
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns:
+          - "*"
