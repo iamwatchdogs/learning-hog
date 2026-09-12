@@ -10,7 +10,9 @@ Similar all other tools on the same landscape, this project does requires access
 
 > [!IMPORTANT]
 >
-> Currently, the project is planned to be implement with OpenAI API compatiable endpoint _(i.e., you can use any premium, free or local LLM endpoint that support this API structure)_. Once the all the planned features are implemented, then support for specific providers will be added one after another.
+> Currently, the project is planned to be implement with OpenAI API compatiable endpoint *(i.e., you can use any premium, free or local LLM endpoint that support this API structure)*. Once the all the planned features are implemented, then support for specific providers will be added one after another.
+
+<!-- HTML comment separates the two consecutive GitHub alert blockquotes; without it markdownlint reports an MD028 false positive between alerts -->
 
 > [!NOTE]
 >

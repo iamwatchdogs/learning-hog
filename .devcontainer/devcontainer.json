@@ -2,11 +2,7 @@
   "name": "learning-hog",
   "build": {
     "dockerfile": "Dockerfile",
-    "context": "..",
-    "args": {
-      "UV_VERSION": "0.8.6",
-      "PYTHON_VERSION": "3.13"
-    }
+    "context": ".."
   },
 
   "runArgs": [
@@ -66,6 +62,7 @@
         "charliermarsh.ruff",
         "astral-sh.ty",
         "github.vscode-github-actions",
+        "jimeh.actionlint",
         "redhat.vscode-yaml",
         "tamasfe.even-better-toml",
         "ryanluker.vscode-coverage-gutters",

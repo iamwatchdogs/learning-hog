@@ -1,0 +1,89 @@
+/**
+ * markdownlint-cli2 configuration — shared by the CLI (pre-commit via prek,
+ * CI, and manual runs) and the VS Code extension `DavidAnson.vscode-markdownlint`,
+ * which reads this exact file natively (no duplication needed).
+ *
+ * Theme of this preset: rules that primarily help *LLM/agent consumption*.
+ * Markdown is the dominant context format for coding agents, so the goal is
+ * deterministic structure (no ambiguity for parsers), high information density
+ * (compact, chunk-friendly blocks), and byte-level consistency.
+ *
+ * Schema for editor autocompletion/validation:
+ * https://raw.githubusercontent.com/DavidAnson/markdownlint-cli2/main/schema/markdownlint-cli2-config-schema.json
+ */
+{
+  "$schema": "https://raw.githubusercontent.com/DavidAnson/markdownlint-cli2/main/schema/markdownlint-cli2-config-schema.json",
+
+  "config": {
+    // -- Structure & consistency (agent parsers resolve structure by shape) --
+
+    // One H1 per file; title is unambiguous for chunking/sitemap generation.
+    "MD025": true,
+    // Uniform ATX `#` headings — the most common convention in agent tooling.
+    "MD003": { "style": "atx" },
+    // Uniform dash `-` bullets: single canonical character, compact tokens.
+    "MD004": { "style": "dash" },
+    // Fenced ``` blocks only (never indented code): indented blocks break
+    // list/context extraction heuristics in many agent pipelines.
+    "MD046": { "style": "fenced" },
+    // Backtick fences only, not tildes: one token, better tokenization.
+    "MD048": { "style": "backtick" },
+    // Space after list markers (`- item`): standard normalized rendering.
+    "MD030": { "ul_single": 1, "ul_multi": 1, "ol_single": 1, "ol_multi": 1 },
+    // Blank lines around headings/lists/fences/tables: block boundaries are
+    // explicit, which makes heading-based context chunking reliable.
+    "MD022": true,
+    "MD032": true,
+    "MD031": true,
+    "MD058": true,
+    // Exactly one trailing newline; files don't bleed into each other when
+    // concatenated into a prompt.
+    "MD047": true,
+
+    // -- Density (fewer wasted context tokens) --
+
+    // No decorative horizontal rules; separators waste tokens and can be
+    // mistaken for heading/severance boundaries.
+    "MD035": { "style": "none" },
+    // One sentence per line is NOT required; strict 80-col wrapping hurts
+    // code-heavy docs (long URLs, CLI snippets). Disabled like the VS Code
+    // extension's default; wrap manually where it reads well.
+    "MD013": false,
+
+    // -- Determinism (avoid ambiguous/broken syntax that trips parsers) --
+
+    // No inline HTML (anchor spans, raw <details>, etc.) — several md->text
+    // converters drop or mangle it. Repo docs currently contain none.
+    "MD033": true,
+    // Bare URLs must be wrapped in <>; otherwise they can swallow following
+    // punctuation and produce wrong links after normalization.
+    "MD034": true,
+    // Every fenced block declares a language: enables syntax-aware
+    // extraction/highlighting and lets agents route code blocks correctly.
+    "MD040": true,
+    // Consistent emphasis (`*text*`) and strong (`**text**`) markers: single
+    // asterisks are the most common canonical form in agent-oriented docs.
+    "MD049": { "style": "asterisk" },
+    "MD050": { "style": "asterisk" },
+    // Consistent table pipes with padding (`| a | b |`): keeps table rows
+    // aligned and diff-stable; cell extraction stays trivial.
+    "MD055": { "style": "leading_and_trailing" },
+    "MD056": true,
+    // Single-space cell padding (`compact`): one canonical cell shape that
+    // rejects unpadded `|a|b|` and over-padded columns alike. The previous
+    // value "padded" was invalid (valid: aligned/any/compact/tight) and
+    // silently disabled this rule.
+    "MD060": { "style": "compact" }
+  },
+
+  // Respect .gitignore so vendored/ignored Markdown (e.g. .venv, node_modules,
+  // build output) is excluded automatically.
+  "gitignore": true,
+
+  // No "globs" block here on purpose: the pre-commit hook supplies filenames
+  // explicitly, and the default CLI glob set is the documented cross-platform
+  // baseline ("**/*.md" minus node_modules). Config "globs" are applied
+  // "instead of or in addition to" command-line globs (cli2 README), so
+  // adding them would change the semantics of manual `markdownlint-cli2`
+  // invocations rather than merely provide a default.
+}

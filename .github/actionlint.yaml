@@ -1,0 +1,17 @@
+# actionlint configuration
+# https://github.com/rhysd/actionlint/blob/main/docs/config.md
+#
+# This file is picked up automatically by actionlint whenever it runs inside
+# this repository (both the pre-commit hook and the lint-gh-workflows CI job),
+# so local and CI linting always apply the exact same ignore rules.
+paths:
+  # The `parallel:` steps syntax (GA on 2026-06-25) is not yet supported by
+  # actionlint v1.7.x, which misparses it as:
+  #   step must run script with "run" section or run action with "uses" section
+  # Only ci.yml uses `parallel:` steps; scoping the ignore to it keeps full
+  # validation (e.g. malformed run/uses steps) for cd.yml and any other
+  # workflow added later. Drop this ignore once actionlint gains support for
+  # parallel steps.
+  '.github/workflows/ci.yml':
+    ignore:
+      - 'step must run script with "run" section or run action with "uses" section'

@@ -1,0 +1,69 @@
+# OpenSSF Scorecard: grades supply-chain hygiene, results go to the Security tab.
+# Needs a `SCORECARD_TOKEN` PAT only for the Branch-Protection check on a
+# public repo, or on any private repo (uncomment `repo_token` below if so).
+
+name: Scorecard supply-chain security
+
+on:
+  # Re-scores when branch protection settings change (default branch only).
+  branch_protection_rule:
+  # Keeps the Maintained check fresh even without pushes.
+  schedule:
+    - cron: "42 2 * * 0"
+  push:
+    branches: [main]
+  pull_request:
+      branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  # Scheduled runs get their own group (see codeql.yml): cancel-in-progress is
+  # evaluated on the arriving run, so a shared group would let a push or
+  # branch-protection event kill the weekly scan.
+  group: scorecard-${{ github.ref }}${{ github.event_name == 'schedule' && '-scheduled' || '' }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
+
+jobs:
+  analysis:
+    name: Scorecard analysis
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read                  # checkout
+      security-events: write          # upload results to code-scanning dashboard
+      id-token: write                 # publish results and get a badge
+      # actions: read                 # uncomment for private repositories
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run analysis
+        uses: ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc # v2.4.4
+        with:
+          results_file: results.sarif
+          results_format: sarif
+
+          # Uncomment for the classic Branch-Protection check (public) or any private repo.
+          # repo_token: ${{ secrets.SCORECARD_TOKEN }}
+
+          # Publishing only works from the default branch: the publish API
+          # rejects results from other refs, so PR runs analyze and upload
+          # SARIF only (results show as PR annotations).
+          publish_results: ${{ github.event_name != 'pull_request' }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: SARIF file
+          path: results.sarif
+          retention-days: 5
+
+      - name: Upload to code-scanning
+        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        with:
+          sarif_file: results.sarif
