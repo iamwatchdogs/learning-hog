@@ -1,6 +1,13 @@
 # OpenSSF Scorecard: grades supply-chain hygiene, results go to the Security tab.
 # Needs a `SCORECARD_TOKEN` PAT only for the Branch-Protection check on a
 # public repo, or on any private repo (uncomment `repo_token` below if so).
+#
+# NOTE: No `pull_request` trigger by design. Upstream lists only `push` +
+# `schedule` (+ `branch_protection_rule`) as supported; `pull_request` is
+# experimental and runs local-only (`supply-chain/local`), so its SARIF misses
+# the `branch-protection` + `online-scm` categories present on `main` and
+# triggers a "configurations not found" code-scanning warning on every PR.
+# PR-time workflow safety is covered by CodeQL (`actions`) + zizmor.
 
 name: Scorecard supply-chain security
 
@@ -12,8 +19,6 @@ on:
     - cron: "42 2 * * 0"
   push:
     branches: [main]
-  pull_request:
-      branches: [main]
 
 permissions:
   contents: read
@@ -51,10 +56,9 @@ jobs:
           # Uncomment for the classic Branch-Protection check (public) or any private repo.
           # repo_token: ${{ secrets.SCORECARD_TOKEN }}
 
-          # Publishing only works from the default branch: the publish API
-          # rejects results from other refs, so PR runs analyze and upload
-          # SARIF only (results show as PR annotations).
-          publish_results: ${{ github.event_name != 'pull_request' }}
+          # All remaining triggers (push to main, schedule, branch_protection_rule)
+          # run on the default branch, so publishing always succeeds.
+          publish_results: true
 
       - name: Upload artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -64,6 +68,10 @@ jobs:
           retention-days: 5
 
       - name: Upload to code-scanning
+        # Defense-in-depth: never upload a PR-triggered SARIF. A PR run only
+        # produces `supply-chain/local` and would drift from the 3-category
+        # `main` baseline (`branch-protection`, `local`, `online-scm`).
+        if: github.event_name != 'pull_request'
         uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
         with:
           sarif_file: results.sarif
