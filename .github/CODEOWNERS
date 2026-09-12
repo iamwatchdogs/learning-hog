@@ -1,0 +1,5 @@
+# Request @iamwatchdogs to review every change in this repository.
+* @iamwatchdogs
+
+# Keep ownership of this policy explicit.
+/.github/CODEOWNERS @iamwatchdogs
