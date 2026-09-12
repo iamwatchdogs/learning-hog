@@ -3,9 +3,15 @@ name: Assign default owner
 on:
   issues:
     types: [opened]
-  pull_request_target:
+
+  # Required to assign fork PRs
+  # This workflow executes only fixed API calls and no PR code.
+  pull_request_target: # zizmor: ignore[dangerous-triggers]
     types: [opened]
-  workflow_run:
+
+  # Required to query live alerts after CodeQL
+  # This workflow consumes no artifacts or PR code.
+  workflow_run: # zizmor: ignore[dangerous-triggers]
     workflows: ["CodeQL Advanced"]
     types: [completed]
   workflow_dispatch:
