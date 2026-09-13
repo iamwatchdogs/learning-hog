@@ -10,7 +10,7 @@ A CLI that gathers valuable learning resources for any concept
 - Types: `uv run ty check src` (strict; warnings are errors)
 - Complexity: `uv run complexipy src --max-complexity-allowed 15`
 - Tests: `uv run pytest` (coverage + xdist come from addopts)
-- Single test: `uv run pytest tests/test_main.py -k name -n 0 --no-cov`
+- Single test: `uv run pytest tests/test_main.py -k test_help_lists_find -n 0 --no-cov`
 - Hooks: `prek run --all-files` (pre-push security gate:
   `prek run --hook-stage pre-push --all-files`)
 - Style config lives in pyproject.toml - read it, do not restate it
