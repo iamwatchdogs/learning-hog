@@ -99,6 +99,30 @@ If your report concerns a security vulnerability, use the channels in the
 - Review is requested from the code owners automatically via
   [.github/CODEOWNERS](.github/CODEOWNERS).
 
+## AI-assisted contributions
+
+This project is built with AI assistance and welcomes AI-assisted
+contributions. The rules below exist because unverifiable AI output wastes
+maintainer time; they set a bar of understanding and evidence, not a ban on
+tools.
+
+- **Disclose.** Any AI assistance beyond trivial editor tab-completion must be
+  disclosed in the issue or pull request, naming the tool(s) used and the
+  extent of the assistance. The issue forms and the pull request template
+  provide fields for this.
+- **Stay in the loop.** You, not the tool, are responsible for every line you
+  submit. You must be able to explain what your changes do and how they
+  interact with the rest of the project without AI assistance.
+- **Review and edit.** AI-generated text and code must be reviewed and edited
+  by a human before submission. Trim the verbosity and noise; cut anything
+  that distracts from the main point.
+- **Show evidence.** Verification claims need pasted output, not assertions
+  (see the pull request template). If an agent did the work, the loop must be
+  closed with real command output: tests failing before the fix and passing
+  after, lint and type checks clean.
+- **Expect closure without review.** Low-effort, unreviewed AI-generated
+  submissions may be closed as spam.
+
 ## License
 
 By contributing, you agree that your contributions will be licensed under the
