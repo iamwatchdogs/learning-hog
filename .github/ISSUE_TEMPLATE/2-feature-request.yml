@@ -10,8 +10,7 @@ body:
 
         Lead with the problem you are trying to solve, not the solution you
         have in mind. The clearest requests state the problem, the evidence
-        that it affects others, and what "done" looks like. Requests that
-        describe only a mechanism without a problem are hard to act on.
+        that it affects others, and what "done" looks like.
 
   - type: checkboxes
     id: existing-request
@@ -36,8 +35,7 @@ body:
       label: Evidence of the problem
       description: >
         How do you know this affects others? Real usage, links to
-        discussions, or concrete scenarios all count. "It would be
-        nice" does not.
+        discussions, or concrete scenarios all count.
     validations:
       required: true
 

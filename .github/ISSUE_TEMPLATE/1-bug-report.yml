@@ -8,10 +8,9 @@ body:
       value: |
         ## Thank you for reporting a bug
 
-        Write this report so a human or a coding agent can reproduce the bug
-        from your description alone. Paste real output instead of describing
-        it from memory, and confirm the bug on the latest `main` first, as it
-        may already be fixed.
+        The more precise your report, the faster the fix. Paste real output
+        instead of describing it from memory, and confirm the bug on the
+        latest `main` first, as it may already be fixed.
 
   - type: checkboxes
     id: existing-issue
@@ -26,7 +25,7 @@ body:
     id: reproducibility
     attributes:
       label: Reproducibility
-      description: Unverifiable reports are closed; a reproducible one gets fixed.
+      description: Ticking this confirms you checked the bug yourself; it saves a round-trip of questions.
       options:
         - label: I can reproduce this on the latest `main` (or the latest release)
           required: true

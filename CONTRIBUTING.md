@@ -18,7 +18,8 @@ By participating in this project you agree to abide by our
 2. Set up a development environment (see below).
 3. Make your changes with tests where applicable.
 4. Run the local checks and make sure they pass.
-5. Open a pull request using the repository's pull request template.
+5. Open a pull request using one of the repository's two pull request
+   templates (described under Submitting pull requests below).
 
 ### Development environment
 
@@ -99,6 +100,14 @@ If your report concerns a security vulnerability, use the channels in the
 - Review is requested from the code owners automatically via
   [.github/CODEOWNERS](.github/CODEOWNERS).
 
+GitHub shows a template chooser when you open a pull request:
+
+- **Default pull request template** — for typical contributions. It asks for
+  a summary, linked issues, the type of change, and the checks you ran.
+- **Agent-assisted pull request template** — for pull requests where AI
+  tooling did substantial work. It adds required AI disclosure, a human
+  understanding attestation, and evidence of a closed verification loop.
+
 ## AI-assisted contributions
 
 This project is built with AI assistance and welcomes AI-assisted
@@ -108,8 +117,9 @@ tools.
 
 - **Disclose.** Any AI assistance beyond trivial editor tab-completion must be
   disclosed in the issue or pull request, naming the tool(s) used and the
-  extent of the assistance. The issue forms and the pull request template
-  provide fields for this.
+  extent of the assistance. The issue forms provide a required field for
+  this, and the agent-assisted pull request template does the same for
+  pull requests.
 - **Stay in the loop.** You, not the tool, are responsible for every line you
   submit. You must be able to explain what your changes do and how they
   interact with the rest of the project without AI assistance.
