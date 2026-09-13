@@ -1,0 +1,77 @@
+name: Bug report
+description: Report something in learning-hog that is broken or behaves unexpectedly.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Thank you for reporting a bug
+
+        Please fill out the form below with as much detail as possible so the
+        issue can be reproduced and fixed quickly.
+
+  - type: checkboxes
+    id: existing-issue
+    attributes:
+      label: Is there an existing issue for this?
+      description: Please search to see if an issue already exists for the bug you encountered.
+      options:
+        - label: I have searched the existing issues
+          required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A concise description of what you are experiencing, including what you expected to happen instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps-to-reproduce
+    attributes:
+      label: Steps to reproduce
+      description: How do you trigger this bug? Please walk us through it step by step.
+      placeholder: |
+        1. Run '...'
+        2. With this configuration '...'
+        3. See the error '...'
+    validations:
+      required: true
+
+  - type: dropdown
+    id: operating-system
+    attributes:
+      label: Operating system
+      description: Which operating system were you using when the bug occurred?
+      multiple: true
+      options:
+        - Linux
+        - macOS
+        - Windows
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Which version of learning-hog are you running? If you ran it from source, mention the commit you are on.
+      placeholder: "e.g. 1.0.0, or main @ abc1234"
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log output
+      description: Please copy and paste any relevant log output. This will be automatically formatted into code, so no need for backticks.
+      render: shell
+
+  - type: checkboxes
+    id: code-of-conduct
+    attributes:
+      label: Code of Conduct
+      description: By submitting this issue, you agree to follow our [Code of Conduct](https://github.com/iamwatchdogs/learning-hog/blob/main/CODE_OF_CONDUCT.md).
+      options:
+        - label: I agree to follow this project's Code of Conduct
+          required: true

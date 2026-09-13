@@ -1,0 +1,58 @@
+name: Feature request
+description: Suggest an idea or an improvement for learning-hog.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Thank you for suggesting a feature
+
+        Please describe the problem you are trying to solve and what you would
+        like to see. Concrete use cases help a lot.
+
+  - type: checkboxes
+    id: existing-request
+    attributes:
+      label: Is there an existing request for this?
+      description: Please search to see if a similar feature request already exists.
+      options:
+        - label: I have searched the existing issues
+          required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem this feature would solve
+      description: A clear and concise description of the problem or limitation you are facing.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: Proposed solution
+      description: What would you like to happen? Describe the outcome you expect.
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any alternative solutions or workarounds you have tried or considered.
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Willingness to contribute
+      description: You do not need to contribute to submit a request, but it helps to know.
+      options:
+        - label: I am willing to help implement this feature
+
+  - type: checkboxes
+    id: code-of-conduct
+    attributes:
+      label: Code of Conduct
+      description: By submitting this issue, you agree to follow our [Code of Conduct](https://github.com/iamwatchdogs/learning-hog/blob/main/CODE_OF_CONDUCT.md).
+      options:
+        - label: I agree to follow this project's Code of Conduct
+          required: true
