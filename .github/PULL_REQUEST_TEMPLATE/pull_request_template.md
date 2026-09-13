@@ -30,7 +30,8 @@ Fixes #
 ## Verification
 
 <!-- The local checks are described in CONTRIBUTING.md. Adjust the list to
-     what your change touches. -->
+     what your change touches: for a docs-only change, linting the markdown
+     (prek run markdownlint-cli2 --all-files) is enough. -->
 
 ```bash
 uv run ruff check src tests

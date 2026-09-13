@@ -25,8 +25,8 @@ By participating in this project you agree to abide by our
 
 The easiest way to get a full environment is the provided dev container
 (described in [.devcontainer/README.md](.devcontainer/README.md)); it ships
-Python 3.13, uv, and every tool listed below, and installs the hook runner for
-you.
+Python 3.13, uv, and every tool listed below, and installs the prek runner
+for you (the `prek install` step below is what activates the hooks).
 
 To set up manually you need [uv](https://docs.astral.sh/uv/) and Python 3.13+:
 
@@ -88,6 +88,8 @@ use one of the issue templates:
 
 - **Bug report** — something is broken or behaves unexpectedly.
 - **Feature request** — you have an idea for an improvement or new capability.
+- **Documentation issue** — something in the docs is missing, wrong, or
+  misleading.
 
 If your report concerns a security vulnerability, use the channels in the
 [security policy](SECURITY.md) instead — do not file a public issue.
