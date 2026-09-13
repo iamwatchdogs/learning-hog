@@ -8,8 +8,10 @@ body:
       value: |
         ## Thank you for reporting a bug
 
-        Please fill out the form below with as much detail as possible so the
-        issue can be reproduced and fixed quickly.
+        Write this report so a human or a coding agent can reproduce the bug
+        from your description alone. Paste real output instead of describing
+        it from memory, and confirm the bug on the latest `main` first, as it
+        may already be fixed.
 
   - type: checkboxes
     id: existing-issue
@@ -20,23 +22,47 @@ body:
         - label: I have searched the existing issues
           required: true
 
-  - type: textarea
-    id: what-happened
+  - type: checkboxes
+    id: reproducibility
     attributes:
-      label: What happened?
-      description: A concise description of what you are experiencing, including what you expected to happen instead.
-    validations:
-      required: true
+      label: Reproducibility
+      description: Unverifiable reports are closed; a reproducible one gets fixed.
+      options:
+        - label: I can reproduce this on the latest `main` (or the latest release)
+          required: true
 
   - type: textarea
     id: steps-to-reproduce
     attributes:
       label: Steps to reproduce
-      description: How do you trigger this bug? Please walk us through it step by step.
+      description: Walk through it step by step, including the exact commands or code you ran.
       placeholder: |
         1. Run '...'
         2. With this configuration '...'
         3. See the error '...'
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: What did you expect to happen?
+      description: A concise description of the behavior you expected instead.
+
+  - type: textarea
+    id: actual-behavior
+    attributes:
+      label: What actually happened?
+      description: Paste the real error or output. Do not paraphrase it.
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Copy the output of `learning-hog --version`. If you ran it from source, mention the commit you are on.
+      placeholder: "e.g. learning-hog 1.0.0, or main @ abc1234"
     validations:
       required: true
 
@@ -51,21 +77,36 @@ body:
         - macOS
         - Windows
 
-  - type: input
-    id: version
-    attributes:
-      label: Version
-      description: Which version of learning-hog are you running? If you ran it from source, mention the commit you are on.
-      placeholder: "e.g. 1.0.0, or main @ abc1234"
-    validations:
-      required: false
-
   - type: textarea
     id: logs
     attributes:
       label: Relevant log output
       description: Please copy and paste any relevant log output. This will be automatically formatted into code, so no need for backticks.
       render: shell
+
+  - type: dropdown
+    id: ai-assistance
+    attributes:
+      label: AI assistance
+      description: >
+        Disclosure required: name the tool(s) used for this issue, if any.
+        AI-assisted content must be reviewed and edited by a human before
+        submission. Undisclosed AI assistance may get the issue closed.
+      multiple: true
+      options:
+        - No AI assistance
+        - Claude Code
+        - GitHub Copilot
+        - Cursor
+        - Other (named below)
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Anything else we should know, including which AI tool you used when "Other (named below)" is selected.
 
   - type: checkboxes
     id: code-of-conduct

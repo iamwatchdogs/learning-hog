@@ -8,8 +8,10 @@ body:
       value: |
         ## Thank you for suggesting a feature
 
-        Please describe the problem you are trying to solve and what you would
-        like to see. Concrete use cases help a lot.
+        Lead with the problem you are trying to solve, not the solution you
+        have in mind. The clearest requests state the problem, the evidence
+        that it affects others, and what "done" looks like. Requests that
+        describe only a mechanism without a problem are hard to act on.
 
   - type: checkboxes
     id: existing-request
@@ -24,7 +26,18 @@ body:
     id: problem
     attributes:
       label: Problem this feature would solve
-      description: A clear and concise description of the problem or limitation you are facing.
+      description: A clear and concise description of the problem or limitation you are facing. Describe the problem, not the solution.
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence of the problem
+      description: >
+        How do you know this affects others? Real usage, links to
+        discussions, or concrete scenarios all count. "It would be
+        nice" does not.
     validations:
       required: true
 
@@ -35,10 +48,16 @@ body:
       description: What would you like to happen? Describe the outcome you expect.
 
   - type: textarea
-    id: alternatives
+    id: acceptance-criteria
     attributes:
-      label: Alternatives considered
-      description: Any alternative solutions or workarounds you have tried or considered.
+      label: Acceptance criteria
+      description: >
+        What must be true when this is done? Think of what a coding agent
+        or a new contributor could verify, such as specific commands that
+        must succeed or behaviors that must hold.
+      placeholder: |
+        - [ ] `learning-hog ...` does X
+        - [ ] Tests cover Y
 
   - type: checkboxes
     id: contribution
@@ -47,6 +66,30 @@ body:
       description: You do not need to contribute to submit a request, but it helps to know.
       options:
         - label: I am willing to help implement this feature
+
+  - type: dropdown
+    id: ai-assistance
+    attributes:
+      label: AI assistance
+      description: >
+        Disclosure required: name the tool(s) used for this issue, if any.
+        AI-assisted content must be reviewed and edited by a human before
+        submission. Undisclosed AI assistance may get the issue closed.
+      multiple: true
+      options:
+        - No AI assistance
+        - Claude Code
+        - GitHub Copilot
+        - Cursor
+        - Other (named below)
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Anything else we should know, including which AI tool you used when "Other (named below)" is selected.
 
   - type: checkboxes
     id: code-of-conduct
