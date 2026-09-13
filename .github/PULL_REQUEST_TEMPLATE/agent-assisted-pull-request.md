@@ -27,6 +27,8 @@ uv run ruff check src tests
 uv run ruff format --check src tests
 uv run ty check src
 uv run pytest
+prek run --all-files
+prek run --hook-stage pre-push --all-files
 ```
 
 ## Verification output
@@ -79,7 +81,7 @@ uv run pytest
       [contributing guidelines](CONTRIBUTING.md)
 - [ ] This pull request follows the
       [Code of Conduct](CODE_OF_CONDUCT.md)
-- [ ] `uv run ruff check src tests` and `uv run ruff format src tests` pass
+- [ ] `uv run ruff check src tests` and `uv run ruff format --check src tests` pass
 - [ ] `uv run ty check src` passes
 - [ ] `uv run pytest` passes
 - [ ] Documentation and/or tests were updated where applicable

@@ -52,7 +52,9 @@ uv run pytest
       [contributing guidelines](CONTRIBUTING.md)
 - [ ] This pull request follows the
       [Code of Conduct](CODE_OF_CONDUCT.md)
-- [ ] `uv run ruff check src tests` and `uv run ruff format src tests` pass
+- [ ] `uv run ruff check src tests` and `uv run ruff format --check src tests` pass
 - [ ] `uv run ty check src` passes
 - [ ] `uv run pytest` passes
+- [ ] `prek run --all-files` passes
+- [ ] `prek run --hook-stage pre-push --all-files` passes (not required for docs-only changes)
 - [ ] Documentation and/or tests were updated where applicable
