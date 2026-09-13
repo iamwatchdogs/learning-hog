@@ -25,8 +25,8 @@ By participating in this project you agree to abide by our
 
 The easiest way to get a full environment is the provided dev container
 (described in [.devcontainer/README.md](.devcontainer/README.md)); it ships
-Python 3.13, uv, and every tool listed below, and installs the prek runner
-for you (the `prek install` step below is what activates the hooks).
+Python 3.13, uv, and every tool listed below, and activates the pre-commit
+hooks for you.
 
 To set up manually you need [uv](https://docs.astral.sh/uv/) and Python 3.13+:
 
