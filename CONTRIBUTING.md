@@ -47,12 +47,18 @@ prek install
 
 ### Local checks
 
-All of these run locally and in CI; hooks run automatically on commit and push
-once `prek install` has been run:
+All of these run locally, and hooks run automatically on commit and push once
+`prek install` has been run. CI runs the full lint/test loop (see
+`.github/workflows/ci.yml`), except that CI skips the format hook — so run the
+format check locally before pushing. `AGENTS.md` carries the canonical copy of
+this verification loop; keep the two in sync if you change it:
 
 ```bash
-# Lint and format (must be clean)
+# Lint and format check (both must be clean)
 uv run ruff check src tests
+uv run ruff format --check src tests
+
+# Repair formatting in place when the check above fails
 uv run ruff format src tests
 
 # Type check
@@ -130,8 +136,10 @@ tools.
   that distracts from the main point.
 - **Show evidence.** Verification claims need pasted output, not assertions
   (see the pull request template). If an agent did the work, the loop must be
-  closed with real command output: tests failing before the fix and passing
-  after, lint and type checks clean.
+  closed with real command output: for behavior changes, tests failing
+  before the fix and passing after; for docs-only or otherwise untestable
+  changes, the relevant checks plus a short note on why no red/green loop
+  applies.
 - **Expect closure without review.** Low-effort, unreviewed AI-generated
   submissions may be closed as spam.
 
