@@ -6,6 +6,11 @@
 # The `docker` entry repins the devcontainer base image digest in
 # .devcontainer/Dockerfile whenever a new multi-arch manifest list digest is
 # published for the pinned tag, keeping the digest pin from going stale.
+# Known limitation: GHCR exposes no publication date (no Last-Modified header),
+# so Docker cooldown fails open and Dependabot PRs carry a
+# "Cooldown could not be applied" warning. Cosmetic only; updates still work.
+# See https://github.com/dependabot/dependabot-core/issues/16114 (Docker Hub
+# fixed by #16143; GHCR still open in #16328).
 #
 # The `uv` entry keeps uv.lock fresh (verified: Dependabot supports the `uv`
 # package-ecosystem; see https://docs.astral.sh/uv/guides/integration/dependabot/).
@@ -49,5 +54,18 @@ updates:
     directory: /.devcontainer
     schedule:
       interval: weekly
+    # GHCR (ghcr.io/astral-sh/uv) publishes no tag/digest publication date, so
+    # this cooldown cannot currently be enforced for the base image and
+    # Dependabot emits "Cooldown could not be applied because no publication
+    # date was available from the registry" on every docker PR (upstream
+    # dependabot-core #16114; Docker Hub fixed by #16143, GHCR open in #16328).
+    # `exclude` skips cooldown for that image before the warning is recorded,
+    # silencing the banner while keeping today's fail-open behavior (updates
+    # are never delayed either way). The exclude name is the registry-stripped
+    # image path, not the full ghcr.io reference. `default-days: 7` stays for
+    # any future docker deps and can govern this image again if GHCR dates
+    # land — drop the exclude entry then. Security updates are never delayed.
     cooldown:
       default-days: 7
+      exclude:
+        - astral-sh/uv
