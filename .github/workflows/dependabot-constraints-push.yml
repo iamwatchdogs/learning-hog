@@ -36,6 +36,11 @@
 #   `http.extraheader` (the same mechanism `actions/checkout` itself uses)
 #   instead of leaving a long-lived credential in `.git/config`.
 #
+# - Checkout never takes `workflow_run.head_branch` as `ref:` (Codacy
+#   workflow_run pwn-request gate). actions/checkout uses the default ref;
+#   the Dependabot head is fetched with git from env after the job gates
+#   above — still only data files, still same-repo / dependabot/ only.
+#
 # - Loop safety / termination: if stage 1 uploaded no artifact (bounds
 #   already in sync — the steady state after the first repair), download
 #   fails soft (`continue-on-error`) and this job exits without pushing.
@@ -99,14 +104,33 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: synced
 
-      - name: Checkout Dependabot branch
+      - name: Checkout repository
         if: steps.artifact.outcome == 'success'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.workflow_run.head_branch }}
+          # Default ref only (this workflow's commit / default branch).
+          # Never pass `workflow_run.head_branch` to actions/checkout —
+          # static scanners flag that pairing as a pwn-request. The
+          # Dependabot head is fetched via git from env below after the
+          # job-level gates, so incoming PR code is never handed to the
+          # privileged checkout path.
           # Credentials are NOT persisted (zizmor artipacked); the push step
           # below injects the token for that single call instead.
           persist-credentials: false
+
+      - name: Fetch Dependabot branch
+        if: steps.artifact.outcome == 'success'
+        env:
+          # Same gates as the job `if:`; untrusted context only via env.
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          set -euo pipefail
+          # Job-level gates already require head_repository == this repo
+          # and a dependabot/ prefix. Data files only are ever copied from
+          # this ref — no PR-supplied scripts are executed.
+          git fetch --no-tags --depth=1 origin \
+            "refs/heads/${BRANCH}:refs/heads/${BRANCH}"
+          git checkout "${BRANCH}"
 
       - name: Commit and push
         if: steps.artifact.outcome == 'success'

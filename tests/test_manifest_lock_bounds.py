@@ -12,6 +12,7 @@ import re
 import tomllib
 from pathlib import Path
 from typing import Any
+from typing import cast
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -51,9 +52,7 @@ def _requirement_name(req: str) -> str:
     if match is None:
         msg = f"unparseable requirement: {req!r}"
         raise AssertionError(msg)
-    name = match.group(1)
-    assert isinstance(name, str)
-    return name
+    return cast("str", match.group(1))
 
 
 def _lower_bound_major_minor(req: str) -> tuple[int, int] | None:
@@ -82,15 +81,17 @@ def test_direct_dependency_bounds_match_lock_major_minor() -> None:
         name = _requirement_name(req)
         key = name.lower().replace("_", "-")
         locked = lock_by_norm.get(key)
-        assert locked is not None, (
-            f"{name}: present in pyproject.toml but missing from uv.lock"
-        )
+        if locked is None:
+            msg = f"{name}: present in pyproject.toml but missing from uv.lock"
+            raise AssertionError(msg)
 
         bound = _lower_bound_major_minor(req)
-        assert bound is not None, (
-            f"{name}: expected a >=X.Y (or ==X.Y) lower bound so "
-            f"major.minor can be checked, got {req!r}"
-        )
+        if bound is None:
+            msg = (
+                f"{name}: expected a >=X.Y (or ==X.Y) lower bound so "
+                f"major.minor can be checked, got {req!r}"
+            )
+            raise AssertionError(msg)
 
         locked_mm = _major_minor(locked)
         if bound != locked_mm:
@@ -99,7 +100,9 @@ def test_direct_dependency_bounds_match_lock_major_minor() -> None:
                 f"(major.minor {locked_mm[0]}.{locked_mm[1]})"
             )
 
-    assert not drifts, (
-        "Direct dependency lower bounds must match uv.lock major.minor "
-        "(versioning-strategy: increase intent):\n  " + "\n  ".join(drifts)
-    )
+    if drifts:
+        msg = (
+            "Direct dependency lower bounds must match uv.lock major.minor "
+            "(versioning-strategy: increase intent):\n  " + "\n  ".join(drifts)
+        )
+        raise AssertionError(msg)
