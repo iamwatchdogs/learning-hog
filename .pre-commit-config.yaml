@@ -117,7 +117,7 @@ repos:
         stages: [pre-push]
 
   - repo: https://github.com/google/osv-scanner
-    rev: v2.5.1
+    rev: v2.6.0
     hooks:
       - id: osv-scanner
         name: "security osv-scanner (dependency review)"
