@@ -22,8 +22,8 @@
 # fresh (ruff-pre-commit, pre-commit-hooks, markdownlint-cli2, actionlint,
 # zizmor-pre-commit, osv-scanner) — previously updated by hand since no
 # autoupdate workflow existed. Dependabot parses the config, skips
-# `repo: local` entries, and also bumps hook `additional_dependencies`
-# pins (gitleaks v8.30.1).
+# `repo: local` entries. The local hook's `additional_dependencies` pin
+# (gitleaks v8.30.1) requires a separate manual update process.
 # See https://github.blog/changelog/2026-03-10-dependabot-now-supports-pre-commit-hooks
 # fetch-metadata reports package-ecosystem `pre-commit` (branch-name
 # segment), so these PRs are not caught by the auto-merge workflow's
