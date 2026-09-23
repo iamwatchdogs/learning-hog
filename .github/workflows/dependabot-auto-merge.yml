@@ -1,0 +1,255 @@
+# Auto-approves and enables auto-merge for low-risk Dependabot PRs.
+#
+# Design notes — each decision below cites the doc or incident that drove it:
+#
+# - `pull_request_target` (not `pull_request`): Dependabot-triggered
+#   `pull_request` runs force GITHUB_TOKEN to read-only regardless of the
+#   job's `permissions:` block, so `gh pr review --approve` and
+#   `gh pr merge --auto` cannot succeed. `pull_request_target` runs in the
+#   base-repo context with a write-capable token — the pattern
+#   `dependabot/fetch-metadata` recommends for this write path:
+#     https://github.com/dependabot/fetch-metadata#readme
+#     https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-on-actions
+#   Safe here because this job never checks out or executes PR code (see
+#   "No `actions/checkout`" below) — the classic "pwn request" pattern
+#   GitHub warns against requires combining this trigger with a checkout of
+#   the PR head, which this workflow deliberately omits:
+#     https://docs.github.com/en/actions/reference/security/securely-using-pull_request_target
+#
+# - `permissions: {}` at the top, grants only at the job: any step added
+#   later that forgets a `permissions:` block gets nothing. GitHub's
+#   hardening guidance recommends minimal, explicit permissions over the
+#   default token scope:
+#     https://docs.github.com/en/actions/reference/security/security-hardening-for-github-actions
+#   The merge step needs `contents: write` (ref updates) and
+#   `pull-requests: write` (approve + enable auto-merge); the label step
+#   needs `issues: write` (the label APIs operate on PRs via the issues
+#   endpoints). Dependabot-triggered workflows otherwise receive a
+#   read-only GITHUB_TOKEN, so these scopes must be raised explicitly
+#   (see "Dependabot on Actions" below):
+#     https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-on-actions
+#
+# - Identity gate uses three conditions, not just `github.actor`: the PR
+#   author login, the author type, and the repository name. The `repository`
+#   check stops this file from acting if the workflow is ever replayed or
+#   executed from a fork (same guard GitHub's own auto-merge tutorial uses):
+#     https://docs.github.com/en/code-security/tutorials/secure-your-dependencies/automate-dependabot-with-actions
+#   Checking `pull_request.user.login` in addition to the actor covers
+#   re-runs/reviews where the actor can differ from the original author.
+#   Real precedent that string checks alone are insufficient: the Jul 2023
+#   "fake Dependabot" campaign — attackers stole GitHub PATs and pushed
+#   forged `dependabot[bot]` commits to hundreds of repos, smuggling
+#   exfiltration workflows and info-stealers past human reviewers:
+#     https://checkmarx.com/blog/surprise-when-dependabot-contributes-malicious-code/
+#     https://www.securityweek.com/stolen-github-credentials-used-to-push-fake-dependabot-commits/
+#     https://tag-security.cncf.io/community/catalog/compromises/2023/fake-dependabot/
+#   That is why the merge decision itself is also gated on
+#   `dependabot/fetch-metadata` below — GitHub's supported validator of
+#   genuine Dependabot update metadata — rather than trusting actor strings.
+#
+# - No `actions/checkout` at all: removing checkout removes the entire
+#   untrusted-code execution surface from a job that holds a write token
+#   (the exact failure mode of "pwn request" incidents above).
+#
+# - `dependabot/fetch-metadata` is pinned to a full commit SHA because
+#   mutable tags are a live supply-chain attack vector — demonstrated by
+#   CVE-2025-30066 (tj-actions/changed-files, Mar 2025, CISA KEV) and
+#   CVE-2025-30154 (reviewdog/action-setup), where repointed tags delivered
+#   malicious code that exfiltrated CI secrets:
+#     https://www.cisa.gov/news-events/alerts/2025/03/18/supply-chain-compromise-third-party-tj-actionschanged-files-cve-2025-30066-and-reviewdogaction
+#     https://docs.github.com/en/actions/reference/security/security-hardening-for-github-actions#using-third-party-actions
+#   The trailing `# vX.Y.Z` comment lets Dependabot's own `github-actions`
+#   ecosystem keep the pin fresh (configured in .github/dependabot.yml).
+#
+# - Merge policy: `github-actions` ecosystem excluded because action updates
+#   change what runs with a write token in every other workflow — the same
+#   root cause as the tj-actions compromise above. Major OSS projects apply
+#   the same exclusion (e.g. coder/coder's Dependabot workflow skips
+#     `github-actions`).
+#   Only `semver-patch` auto-merges; minor/major fall through to human
+#   review — matching the gating used by prometheus/prometheus and
+#   hashicorp/* Dependabot auto-merge workflows, and GitHub's own tutorial
+#   example (which gates on `version-update:semver-patch`):
+#     https://docs.github.com/en/code-security/tutorials/secure-your-dependencies/automate-dependabot-with-actions
+#   Historical justification for never auto-merging majors: GitHub staff
+#   declined to ship built-in auto-merge without review, citing the risk of
+#   landing malicious dependency changes unattended (dependabot/feedback
+#   discussion history; see dependabot-core issue discussion):
+#     https://github.com/dependabot/feedback/issues/253
+#
+# - Enforced via `gh pr merge --auto`, which *queues* the merge and only
+#   completes once branch protection (required checks/reviews) is satisfied;
+#   `--admin` is never used because it bypasses every requirement this
+#   workflow depends on:
+#     https://cli.github.com/manual/gh_pr_merge
+#     https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-auto-merge-for-pull-requests-in-your-repository
+#   Auto-merge itself cannot bypass rulesets: GitHub excludes auto-merge
+#   evaluation from bypass-actor configuration (ruleset bypass modes apply
+#   only when an app calls the merge API directly):
+#     https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets
+#
+# - Untrusted context (`html_url`) is passed through `env:` and referenced
+#   as a shell variable — never interpolated into the `run:` string — per
+#   GitHub's script-injection guidance:
+#     https://docs.github.com/en/actions/reference/security/security-hardening-for-github-actions#github_token-and-script-injection
+#
+# Compensating controls (why patch-only alone is not enough): major supply-
+# chain incidents shipped as *patch* releases, so the semver gate reduces
+# accidental breakage but does not stop a malicious patch. Real cases:
+#   - event-stream / flatmap-stream (Sep–Nov 2018): maintainer handoff led
+#     to a malicious transitive dep targeting Copay Bitcoin wallets.
+#       https://blog.npmjs.org/post/180565383195/details-about-the-event-stream-incident
+#   - ua-parser-js (Oct 2021, CVE-2021-4229): compromised maintainer account
+#     published versions with a crypto miner / credential stealer; CISA
+#     advisory issued.
+#       https://www.cisa.gov/news-events/alerts/2021/10/22/malware-discovered-popular-npm-package-ua-parser-js
+#   - colors.js / faker.js (Jan 2022): maintainer deliberately sabotaged
+#     his own packages (github.com/Marak/colors.js issue #289).
+#   - node-ipc / peacenotwar (Mar 2022, CVE-2022-23812): protestware
+#     deleted files on systems with RU/BL locale.
+#   - Shai-Hulud npm worm (Sep 2025): self-propagating compromise of 500+
+#     packages; CISA advisory 2025-09-23.
+#       https://www.cisa.gov/news-events/alerts/2025/09/23/widespread-supply-chain-compromise-impacting-npm-ecosystem
+# Compensating controls therefore are: (1) 7-day Dependabot cooldown in
+#   .github/dependabot.yml (version updates wait for community vetting;
+#   security updates are never delayed — docs:
+#   https://docs.github.com/en/code-security/concepts/supply-chain-security/dependabot-version-updates),
+#   (2) required `CI Status` + `Dependency review` checks enforced server-
+#   side by `--auto` (dependency-review blocks newly introduced CVEs at
+#   moderate+: .github/workflows/dependency-review.yml, docs
+#   https://docs.github.com/en/code-security/how-tos/secure-your-supply-chain/manage-your-dependency-security/configure-dependency-review-action),
+#   (3) this workflow's fetch-metadata validation.
+#
+# Prerequisites (repo settings, not visible in this file):
+#   1. Settings → General → Pull Requests → "Allow auto-merge" enabled —
+#      required or the API rejects `--auto`:
+#        https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-auto-merge-for-pull-requests-in-your-repository
+#   2. "Allow GitHub Actions to create and approve pull requests" enabled —
+#      required for `gh pr review --approve`:
+#        https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-pull-requests-that-require-a-review/allowing-github-actions-to-create-and-approve-pull-requests
+#   3. Branch ruleset on `main` requires the `CI Status` check and the
+#      `Dependency review` check (the ci.yml line-279 comment saying
+#      "All checks passed" is stale — the job's actual name is `CI Status`).
+#      Required checks must be named explicitly; a check that has never run
+#      cannot be required:
+#        https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/managing-a-branch-protection-rule
+#   4. CODEOWNERS (`* @iamwatchdogs`): if the ruleset also requires Code
+#      Owner review, auto-merge stalls indefinitely until Dependabot PRs are
+#      exempted or the workflow's approval satisfies the requirement
+#      (known auto-merge + codeowners footgun):
+#        https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/defining-the-mergeability-of-pull-requests/troubleshooting-required-approvals
+#   5. `.github/dependabot.yml` splits uv / github-actions groups by
+#      `update-types` (patch vs minor+major). fetch-metadata rolls
+#      `update-type` up to the highest semver in the PR, so a patch-only
+#      group reports `version-update:semver-patch` and can match the gate
+#      below; minor/major groups roll up higher and fail closed to human
+#      review:
+#        https://docs.github.com/en/code-security/dependabot/working-with-dependabot/dependabot-groups
+
+name: Dependabot auto-merge
+
+on:
+  pull_request_target: # zizmor: ignore[dangerous-triggers]
+    branches: [main]
+
+# Deny-all default; scopes are granted per job below (matches zizmor.yml).
+# Rationale: https://docs.github.com/en/actions/reference/security/security-hardening-for-github-actions#setting-permissions-for-github_token
+permissions: {}
+
+concurrency:
+  # Keyed on PR number: a new commit pushes a new run and cancels the stale
+  # one, so the gate is always re-evaluated against the latest head.
+  group: dependabot-auto-merge-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  auto-merge:
+    name: Auto-merge Dependabot PR
+    runs-on: ubuntu-latest
+
+    # Gate 1 — identity + scope (see header for rationale + incident refs
+    # on each clause: fake-Dependabot campaign Jul 2023, GitHub tutorial's
+    # repository guard).
+    if: >-
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      github.event.pull_request.user.type == 'Bot' &&
+      github.repository == 'iamwatchdogs/learning-hog'
+
+    permissions:
+      contents: write      # ref updates for `gh pr merge --auto`
+      pull-requests: write # `gh pr review --approve` + enable auto-merge
+      issues: write        # `gh pr edit --add-label` (labels use the issues API)
+      # Explicit raise required: Dependabot-triggered runs default to a
+      # read-only token — https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-on-actions
+      # `pull_request_target` is what makes these scopes actually grant a
+      # write-capable token for Dependabot-authored PRs (see header).
+
+    steps:
+      # Gate 2 — structured metadata from GitHub's supported Dependabot
+      # validator (https://github.com/dependabot/fetch-metadata). Prefer
+      # this over parsing PR titles or trusting actor strings (fake
+      # Dependabot campaign, Jul 2023 — see header): it reports update-type,
+      # dependency-names, ecosystem, and (with an alert-capable token)
+      # alert-state / ghsa-id / cvss.
+      - name: Fetch Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Stamp every Dependabot-authored PR with the `dependabot` label.
+      # Runs unconditionally inside this job — Gate 1 (job-level `if:`)
+      # already guarantees the PR author is `dependabot[bot]` — and is
+      # intentionally independent of Gate 3's patch-only merge policy, so
+      # minor/major PRs awaiting human review get the label too.
+      # The `dependabot` label already exists in the repo (label APIs
+      # require `issues: write`).
+      - name: Add dependabot label
+        env:
+          # Untrusted input flows through env, never string-interpolated
+          # into the run block — script-injection hardening per
+          # https://docs.github.com/en/actions/reference/security/security-hardening-for-github-actions#github_token-and-script-injection
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh pr edit "$PR_URL" --add-label "dependabot"
+
+      # Gate 3 — policy (each clause cited in the header):
+      #   * exclude `github-actions`: action bumps change what runs with a
+      #     write token in every other workflow — tj-actions/changed-files
+      #     CVE-2025-30066 (CISA KEV, Mar 2025) is the cautionary tale;
+      #     coder/coder applies the same ecosystem exclusion.
+      #   * `semver-patch` only: matches GitHub's official auto-merge
+      #     tutorial gate and the prometheus / hashicorp/* pattern; minors
+      #     and majors change API surface and may introduce transitive deps
+      #     or license changes, so they require human review.
+      #   * fetch-metadata rolls `update-type` up to the highest semver in
+      #     the PR. Patch-only groups (see dependabot.yml `update-types`)
+      #     roll up to `semver-patch` and match; minor/major groups roll up
+      #     higher and fail this condition closed to human review.
+      #
+      # Patch-only does NOT stop a *malicious* patch release — event-stream
+      # (2018), ua-parser-js (2021, CVE-2021-4229 / CISA alert), and
+      # Shai-Hulud (2025, CISA advisory) all shipped at patch level. See
+      # the "Compensating controls" section in the header for the cooldown +
+      # required-check + dependency-review stack that backstops this gate.
+      - name: Approve and enable auto-merge (patch-only, non-action deps)
+        if: >-
+          steps.metadata.outputs.package-ecosystem != 'github-actions' &&
+          steps.metadata.outputs.update-type == 'version-update:semver-patch'
+        env:
+          # Untrusted input flows through env, never string-interpolated
+          # into the run block — script-injection hardening per
+          # https://docs.github.com/en/actions/reference/security/security-hardening-for-github-actions#github_token-and-script-injection
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh pr review --approve "$PR_URL"
+          # --auto queues the merge and completes only once branch protection
+          # (required checks/reviews) is satisfied — never use --admin, which
+          # bypasses every requirement this workflow depends on.
+          #   https://cli.github.com/manual/gh_pr_merge
+          #   https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-auto-merge-for-pull-requests-in-your-repository
+          gh pr merge --auto --squash "$PR_URL"
