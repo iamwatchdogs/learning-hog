@@ -69,9 +69,10 @@
 #     cause as the tj-actions compromise above. Major OSS projects apply
 #     the same exclusion (e.g. coder/coder's Dependabot workflow skips
 #     `github-actions`).
-#   * `semver-patch` auto-merges for every non-action ecosystem — matches
-#     GitHub's official auto-merge tutorial and the prometheus /
-#     hashicorp/* pattern:
+#   * `semver-patch` auto-merges for ecosystems not excluded above/below
+#     (in practice `uv` patches; `github-actions` and `pre-commit` are
+#     excluded first) — matches GitHub's official auto-merge tutorial and
+#     the prometheus / hashicorp/* pattern:
 #       https://docs.github.com/en/code-security/tutorials/secure-your-dependabot/automate-dependabot-with-actions
 #   * Docker digest bumps auto-merge only when fetch-metadata confirms a
 #     digest-only refresh: `update-type` empty *and* `new-version` is a
