@@ -22,9 +22,11 @@
 #   default token scope:
 #     https://docs.github.com/en/actions/reference/security/security-hardening-for-github-actions
 #   The merge step needs `contents: write` (ref updates) and
-#   `pull-requests: write` (approve + enable auto-merge); Dependabot-triggered
-#   workflows otherwise receive a read-only GITHUB_TOKEN, so these scopes
-#   must be raised explicitly (see "Dependabot on Actions" below):
+#   `pull-requests: write` (approve + enable auto-merge); the label step
+#   needs `issues: write` (the label APIs operate on PRs via the issues
+#   endpoints). Dependabot-triggered workflows otherwise receive a
+#   read-only GITHUB_TOKEN, so these scopes must be raised explicitly
+#   (see "Dependabot on Actions" below):
 #     https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-on-actions
 #
 # - Identity gate uses three conditions, not just `github.actor`: the PR
@@ -176,6 +178,7 @@ jobs:
     permissions:
       contents: write      # ref updates for `gh pr merge --auto`
       pull-requests: write # `gh pr review --approve` + enable auto-merge
+      issues: write        # `gh pr edit --add-label` (labels use the issues API)
       # Explicit raise required: Dependabot-triggered runs default to a
       # read-only token — https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-on-actions
       # `pull_request_target` is what makes these scopes actually grant a
@@ -193,6 +196,24 @@ jobs:
         uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Stamp every Dependabot-authored PR with the `dependabot` label.
+      # Runs unconditionally inside this job — Gate 1 (job-level `if:`)
+      # already guarantees the PR author is `dependabot[bot]` — and is
+      # intentionally independent of Gate 3's patch-only merge policy, so
+      # minor/major PRs awaiting human review get the label too.
+      # The `dependabot` label already exists in the repo (label APIs
+      # require `issues: write`).
+      - name: Add dependabot label
+        env:
+          # Untrusted input flows through env, never string-interpolated
+          # into the run block — script-injection hardening per
+          # https://docs.github.com/en/actions/reference/security/security-hardening-for-github-actions#github_token-and-script-injection
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh pr edit "$PR_URL" --add-label "dependabot"
 
       # Gate 3 — policy (each clause cited in the header):
       #   * exclude `github-actions`: action bumps change what runs with a
