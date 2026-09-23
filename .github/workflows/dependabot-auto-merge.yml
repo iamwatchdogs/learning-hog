@@ -73,16 +73,23 @@
 #     GitHub's official auto-merge tutorial and the prometheus /
 #     hashicorp/* pattern:
 #       https://docs.github.com/en/code-security/tutorials/secure-your-dependabot/automate-dependabot-with-actions
-#   * Docker digest bumps auto-merge: fetch-metadata reports `update-type`
-#     as an *empty string* for digest-only PRs (the run log prints the
-#     four letters "null" — that is JS null stringified for display; the
-#     step output itself is `''`, so the gate checks `-z`, never
-#     `== 'null'`). Digests are content-addressed/immutable, so they are
-#     strictly safer than tag moves; residual risk (no GHCR cooldown,
-#     thin path-filtered CI on Dockerfile-only PRs) is accepted for a
-#     devcontainer base image. Known quirk: some digest PRs misreport
-#     `semver-major` (dependabot/fetch-metadata#726) and fall closed to
-#     human review — intermittent, not universal, coverage.
+#   * Docker digest bumps auto-merge only when fetch-metadata confirms a
+#     digest-only refresh: `update-type` empty *and* `new-version` is a
+#     64-hex sha256 body (no `sha256:` prefix — verified against
+#     fetch-metadata v3.1.0 on PR #23: previous-version='', new-version=
+#     64-hex). Empty `update-type` alone is not proof of a digest-only PR
+#     (non-semver tags also report empty; the run log's "null" is JS null
+#     stringified for display — the step output is `''`, so the gate
+#     checks `-z`, never `== 'null'`). The hex check is what makes the
+#     gate honest; non-hex docker updates fall closed. Digests are
+#     content-addressed/immutable, so they are strictly safer than tag
+#     moves; residual risk (no GHCR cooldown, thin path-filtered CI on
+#     Dockerfile-only PRs) is accepted for a devcontainer base image.
+#     Known quirk: some digest PRs misreport `semver-major`
+#     (dependabot/fetch-metadata#726) and fall closed to human review —
+#     intermittent, not universal, coverage. The Dockerfile pins
+#     `tag@digest` so the version stays visible next to the content pin
+#     and Dependabot updates both together.
 #   * `pre-commit` `semver-minor` auto-merges: these are lint/tooling pins
 #     that run only in CI — a bad bump fails checks red instead of
 #     shipping. Runtime (`uv`) minors stay human-gated because this repo
@@ -245,6 +252,7 @@ jobs:
           # https://docs.github.com/en/actions/reference/security/security-hardening-for-github-actions#github_token-and-script-injection
           PACKAGE_ECOSYSTEM: ${{ steps.metadata.outputs.package-ecosystem }}
           UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
+          NEW_VERSION: ${{ steps.metadata.outputs.new-version }}
         run: |
           set -euo pipefail
 
@@ -256,10 +264,14 @@ jobs:
           elif [ "$UPDATE_TYPE" = "version-update:semver-patch" ]; then
             eligible=true
             reason="semver-patch"
-          elif [ "$PACKAGE_ECOSYSTEM" = "docker" ] && [ -z "$UPDATE_TYPE" ]; then
-            # Digest bumps: fetch-metadata leaves update-type empty ('').
-            # The run log prints "null" — that is display stringification,
-            # not the step output; never compare against 'null' here.
+          elif [ "$PACKAGE_ECOSYSTEM" = "docker" ] && [ -z "$UPDATE_TYPE" ] && [[ "$NEW_VERSION" =~ ^[0-9a-f]{64}$ ]]; then
+            # Digest bumps: fetch-metadata leaves update-type empty ('')
+            # and reports the bare 64-hex digest body as new-version
+            # (verified on PR #23; previous-version is empty under v3.1.0,
+            # so a previous==new gate would never fire). The log's "null"
+            # is display stringification — never compare against 'null'.
+            # Hex check proves digest-only: non-semver tags also report
+            # empty update-type but a non-hex new-version (fail closed).
             eligible=true
             reason="docker digest bump"
           elif [ "$PACKAGE_ECOSYSTEM" = "pre-commit" ] && [ "$UPDATE_TYPE" = "version-update:semver-minor" ]; then
