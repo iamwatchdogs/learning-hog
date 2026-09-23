@@ -1,0 +1,133 @@
+# Stage 1 of the Dependabot pyproject.toml / uv.lock bounds sync (read-only).
+#
+# Problem: Dependabot's uv updater often rewrites uv.lock without raising the
+# matching `>=X.Y.Z` lower bounds in pyproject.toml (PR #20, PR #27;
+# dependabot/dependabot-core#14908 — packages not on PyPI with a
+# `description` are misclassified as libraries, which suppresses manifest
+# bumps). `versioning-strategy: increase` alone does not close the gap.
+# `tests/test_manifest_lock_bounds.py` catches residual drift in CI but
+# fails closed; this workflow repairs the PR before that gate runs.
+#
+# This stage runs [ganzua](https://github.com/latk/ganzua) on every
+# Dependabot PR that touches pyproject.toml or uv.lock, lifts any lagging
+# bounds to match the lockfile (granular: `foo>=3.5` + lock `4.7.2` →
+# `foo>=4.7`), re-runs `uv lock` so the lock's root `requires-dist`
+# specifiers stay consistent with any raised bound, and hands the two files
+# to stage 2 (`dependabot-constraints-push.yml`) as an artifact for the
+# write-token push.
+#
+# Why two workflows: Dependabot-triggered `pull_request` runs force
+# GITHUB_TOKEN to read-only regardless of the job's `permissions:` block, so
+# stage 1 cannot push:
+#   https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-on-actions
+# Stage 2 uses `workflow_run` (not on GitHub's restricted-event list for
+# Dependabot), which receives a write-capable token when `contents: write`
+# is granted. This split keeps the untrusted-code surface (PR checkout +
+# tool run) in a read-only job.
+#
+# Design notes:
+# - `pull_request` (not `pull_request_target`): stage 1 never needs a write
+#   token; checking out PR code under `pull_request_target` is the classic
+#   "pwn request" pattern GitHub warns against.
+# - Identity gate (author login + author type + repository): human PRs keep
+#   responsibility for their own bounds; only Dependabot PRs in this
+#   repository get the automatic repair. The same three-clause gate pattern
+#   as `dependabot-auto-merge.yml` (fake-Dependabot campaign, Jul 2023).
+# - ganzua is pinned to an exact version (`uvx ganzua==0.4.0`) — mutable
+#   tags are a live supply-chain vector (CVE-2025-30066 tj-actions). Bump
+#   deliberately when a new release is vetted.
+# - Loop safety: stage 1 uploads an artifact only when files actually change;
+#   stage 2 exits without pushing when the artifact is absent, so the push-
+#   triggered re-run of this workflow finds bounds already in sync,
+#   uploads nothing, and terminates.
+# - `persist-credentials: false` (zizmor artipacked): stage 1 never pushes;
+#   the only write path is the artifact handoff to stage 2.
+
+name: Dependabot constraints bump
+
+on:
+  pull_request:
+    paths:
+      - pyproject.toml
+      - uv.lock
+
+# Deny-all default; scopes are granted per job below (matches zizmor.yml).
+# Rationale: https://docs.github.com/en/actions/reference/security/security-hardening-for-github-actions#setting-permissions-for-github_token
+permissions: {}
+
+concurrency:
+  # Keyed on PR number: a new commit pushes a new run and cancels the stale
+  # one, so ganzua always runs against the latest head.
+  group: dependabot-constraints-bump-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  bump:
+    name: Sync pyproject bounds from uv.lock
+    # Gate — identity + scope (see header): dependabot[bot] PRs only, this
+    # repository only. Prevents the workflow from acting on human PRs or if
+    # it is ever replayed from a fork context.
+    if: >-
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      github.event.pull_request.user.type == 'Bot' &&
+      github.repository == 'iamwatchdogs/learning-hog'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # checkout PR head only; push happens in stage 2
+
+    steps:
+      # Checkout the PR head commit (not the temporary merge ref): stage 2
+      # pushes these files back onto the Dependabot branch, so basing the
+      # edit on the merge commit would drag unrelated base-branch changes
+      # into the Dependabot PR.
+      - name: Checkout PR head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          # Ephemeral CI job; a cache entry would only grow and never be
+          # reused across Dependabot PR branches (same rationale as cd.yml).
+          enable-cache: false
+
+      - name: Bump pyproject bounds from uv.lock
+        run: |
+          set -euo pipefail
+          # ganzua raises each `>=X.Y` lower bound to the locked major.minor
+          # (granular: old `foo>=3.5` + locked `4.7.2` → `foo>=4.7`).
+          uvx ganzua==0.4.0 constraints bump
+          # Re-resolve so uv.lock's root `requires-dist` specifiers mirror any
+          # bound ganzua just raised — otherwise the lock goes stale in the
+          # other direction (pyproject ahead of uv.lock).
+          uv lock
+
+      - name: Detect changes
+        id: diff
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- pyproject.toml uv.lock; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Bounds already match uv.lock; nothing to hand off to stage 2."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Bound drift repaired:"
+            git diff -- pyproject.toml uv.lock
+          fi
+
+      # Artifact handoff to stage 2 — the only channel across the
+      # read-only (stage 1) / write (stage 2) token boundary. Uploaded only
+      # when files changed, which is also the loop-termination signal:
+      # stage 2 skips the push when this artifact is absent.
+      - name: Upload synced files for stage 2
+        if: steps.diff.outputs.changed == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.0
+        with:
+          name: constraints-sync
+          path: |
+            pyproject.toml
+            uv.lock
+          retention-days: 1
+          if-no-files-found: error
