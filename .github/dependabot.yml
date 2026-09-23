@@ -26,10 +26,10 @@
 # (gitleaks v8.30.1) requires a separate manual update process.
 # See https://github.blog/changelog/2026-03-10-dependabot-now-supports-pre-commit-hooks
 # fetch-metadata reports package-ecosystem `pre-commit` (branch-name
-# segment), so these PRs are not caught by the auto-merge workflow's
-# `github-actions` exclusion; update-type can be empty for non-semver
-# tags, but every rev here is a semver-style tag so the patch group below
-# still rolls up to `version-update:semver-patch`.
+# segment); the auto-merge workflow excludes the entire ecosystem (any
+# update-type) because required CI does not exercise the full hook set —
+# see the merge-policy header in dependabot-auto-merge.yml. Groups below
+# only control PR packaging, not merge eligibility.
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -97,12 +97,11 @@ updates:
     # wait until a release is a week old. Security updates are never delayed.
     cooldown:
       default-days: 7
-    # Split by update-type so fetch-metadata's roll-up `update-type` stays
-    # accurate: a single catch-all group reports the *highest* semver change
-    # in the PR, so one minor would block auto-merge of an all-patch group.
-    # Patch-only groups roll up to `version-update:semver-patch` and can
-    # match the auto-merge gate; minor/major groups fail closed. Updates on
-    # non-semver tags report no update-type and fall closed to human review.
+    # Split by update-type so each PR is a coherent review unit (a single
+    # catch-all group would mix patches with minors/majors). The auto-merge
+    # workflow excludes package-ecosystem `pre-commit` entirely regardless
+    # of roll-up update-type, so these groups do not affect merge
+    # eligibility — they only package PRs for human review.
     groups:
       pre-commit-patch:
         patterns:

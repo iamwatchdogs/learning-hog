@@ -61,21 +61,48 @@
 #   The trailing `# vX.Y.Z` comment lets Dependabot's own `github-actions`
 #   ecosystem keep the pin fresh (configured in .github/dependabot.yml).
 #
-# - Merge policy: `github-actions` ecosystem excluded because action updates
-#   change what runs with a write token in every other workflow — the same
-#   root cause as the tj-actions compromise above. Major OSS projects apply
-#   the same exclusion (e.g. coder/coder's Dependabot workflow skips
+# - Merge policy (evaluated as plain shell in the "Evaluate merge policy"
+#   step — a multi-branch decision reads far better as if/elif than as a
+#   nested Actions expression):
+#   * `github-actions` ecosystem excluded because action updates change
+#     what runs with a write token in every other workflow — the same root
+#     cause as the tj-actions compromise above. Major OSS projects apply
+#     the same exclusion (e.g. coder/coder's Dependabot workflow skips
 #     `github-actions`).
-#   Only `semver-patch` auto-merges; minor/major fall through to human
-#   review — matching the gating used by prometheus/prometheus and
-#   hashicorp/* Dependabot auto-merge workflows, and GitHub's own tutorial
-#   example (which gates on `version-update:semver-patch`):
-#     https://docs.github.com/en/code-security/tutorials/secure-your-dependencies/automate-dependabot-with-actions
-#   Historical justification for never auto-merging majors: GitHub staff
-#   declined to ship built-in auto-merge without review, citing the risk of
-#   landing malicious dependency changes unattended (dependabot/feedback
-#   discussion history; see dependabot-core issue discussion):
-#     https://github.com/dependabot/feedback/issues/253
+#   * `semver-patch` auto-merges for ecosystems not excluded above/below
+#     (in practice `uv` patches; `github-actions` and `pre-commit` are
+#     excluded first) — matches GitHub's official auto-merge tutorial and
+#     the prometheus / hashicorp/* pattern:
+#       https://docs.github.com/en/code-security/tutorials/secure-your-dependabot/automate-dependabot-with-actions
+#   * Docker digest bumps auto-merge only when fetch-metadata confirms a
+#     digest-only refresh: `update-type` empty *and* `new-version` is a
+#     64-hex sha256 body (no `sha256:` prefix — verified against
+#     fetch-metadata v3.1.0 on PR #23: previous-version='', new-version=
+#     64-hex). Empty `update-type` alone is not proof of a digest-only PR
+#     (non-semver tags also report empty; the run log's "null" is JS null
+#     stringified for display — the step output is `''`, so the gate
+#     checks `-z`, never `== 'null'`). The hex check is what makes the
+#     gate honest; non-hex docker updates fall closed. Digests are
+#     content-addressed/immutable, so they are strictly safer than tag
+#     moves; residual risk (no GHCR cooldown, thin path-filtered CI on
+#     Dockerfile-only PRs) is accepted for a devcontainer base image.
+#     Known quirk: some digest PRs misreport `semver-major`
+#     (dependabot/fetch-metadata#726) and fall closed to human review —
+#     intermittent, not universal, coverage. The Dockerfile pins
+#     `tag@digest` so the version stays visible next to the content pin
+#     and Dependabot updates both together.
+#   * `pre-commit` is never auto-merged (patch or minor): required CI
+#     does not exercise the full hook set, so a bad bump could green-check
+#     and merge unexercised. Evidence in this repo: prek-action SKIPs
+#     markdownlint-cli2/actionlint (ci.yml), zizmor/osv-scanner run only
+#     at pre-push (never in CI), and path filters skip lint jobs entirely
+#     for Dockerfile-only PRs. Runtime (`uv`) minors stay human-gated
+#     because this repo is dense with pre-1.0 deps where semver clause 4
+#     allows "minor" releases to break, and majors are never auto-merged
+#     anywhere (GitHub staff declined built-in auto-merge for this reason
+#     — dependabot/feedback#253).
+#   * Everything else (uv patches via semver-patch, all majors, non-semver
+#     tags, docker non-digest) fails closed to human review.
 #
 # - Enforced via `gh pr merge --auto`, which *queues* the merge and only
 #   completes once branch protection (required checks/reviews) is satisfied;
@@ -93,9 +120,10 @@
 #   GitHub's script-injection guidance:
 #     https://docs.github.com/en/actions/reference/security/security-hardening-for-github-actions#github_token-and-script-injection
 #
-# Compensating controls (why patch-only alone is not enough): major supply-
-# chain incidents shipped as *patch* releases, so the semver gate reduces
-# accidental breakage but does not stop a malicious patch. Real cases:
+# Compensating controls (why the semver gate alone is not enough): major
+# supply-chain incidents shipped as *patch* releases, so the semver gate
+# reduces accidental breakage but does not stop a malicious patch. Real
+# cases:
 #   - event-stream / flatmap-stream (Sep–Nov 2018): maintainer handoff led
 #     to a malicious transitive dep targeting Copay Bitcoin wallets.
 #       https://blog.npmjs.org/post/180565383195/details-about-the-event-stream-incident
@@ -200,8 +228,8 @@ jobs:
       # Stamp every Dependabot-authored PR with the `dependabot` label.
       # Runs unconditionally inside this job — Gate 1 (job-level `if:`)
       # already guarantees the PR author is `dependabot[bot]` — and is
-      # intentionally independent of Gate 3's patch-only merge policy, so
-      # minor/major PRs awaiting human review get the label too.
+      # intentionally independent of Gate 3's merge policy, so PRs that
+      # fail closed to human review get the label too.
       # The `dependabot` label already exists in the repo (label APIs
       # require `issues: write`).
       - name: Add dependabot label
@@ -215,29 +243,63 @@ jobs:
           set -euo pipefail
           gh pr edit "$PR_URL" --add-label "dependabot"
 
-      # Gate 3 — policy (each clause cited in the header):
-      #   * exclude `github-actions`: action bumps change what runs with a
-      #     write token in every other workflow — tj-actions/changed-files
-      #     CVE-2025-30066 (CISA KEV, Mar 2025) is the cautionary tale;
-      #     coder/coder applies the same ecosystem exclusion.
-      #   * `semver-patch` only: matches GitHub's official auto-merge
-      #     tutorial gate and the prometheus / hashicorp/* pattern; minors
-      #     and majors change API surface and may introduce transitive deps
-      #     or license changes, so they require human review.
-      #   * fetch-metadata rolls `update-type` up to the highest semver in
-      #     the PR. Patch-only groups (see dependabot.yml `update-types`)
-      #     roll up to `semver-patch` and match; minor/major groups roll up
-      #     higher and fail this condition closed to human review.
-      #
-      # Patch-only does NOT stop a *malicious* patch release — event-stream
-      # (2018), ua-parser-js (2021, CVE-2021-4229 / CISA alert), and
-      # Shai-Hulud (2025, CISA advisory) all shipped at patch level. See
-      # the "Compensating controls" section in the header for the cooldown +
-      # required-check + dependency-review stack that backstops this gate.
-      - name: Approve and enable auto-merge (patch-only, non-action deps)
-        if: >-
-          steps.metadata.outputs.package-ecosystem != 'github-actions' &&
-          steps.metadata.outputs.update-type == 'version-update:semver-patch'
+      # Gate 3 — policy. The decision lives in a shell if/elif (see header
+      # for why each branch exists) and is exposed as a single boolean step
+      # output so downstream steps read as `if: steps.policy.outputs.eligible`
+      # instead of re-encoding the whole policy as a nested expression.
+      # Inputs flow through `env:`, never interpolated into the script.
+      - name: Evaluate merge policy
+        id: policy
+        env:
+          # Untrusted input flows through env, never string-interpolated
+          # into the run block — script-injection hardening per
+          # https://docs.github.com/en/actions/reference/security/security-hardening-for-github-actions#github_token-and-script-injection
+          PACKAGE_ECOSYSTEM: ${{ steps.metadata.outputs.package-ecosystem }}
+          UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
+          NEW_VERSION: ${{ steps.metadata.outputs.new-version }}
+        run: |
+          set -euo pipefail
+
+          eligible=false
+          reason=""
+
+          if [ "$PACKAGE_ECOSYSTEM" = "github-actions" ]; then
+            reason="github-actions ecosystem is never auto-merged"
+          elif [ "$PACKAGE_ECOSYSTEM" = "pre-commit" ]; then
+            # Required CI does not run the full hook set (prek SKIP list,
+            # pre-push-only zizmor/osv-scanner, path-filtered lint jobs),
+            # so exclude the whole ecosystem before the generic
+            # semver-patch branch — patches have the same hole as minors.
+            reason="pre-commit hooks are not fully exercised by required CI"
+          elif [ "$PACKAGE_ECOSYSTEM" = "docker" ] && [ -z "$UPDATE_TYPE" ] && [[ "$NEW_VERSION" =~ ^[0-9a-f]{64}$ ]]; then
+            # Digest bumps: fetch-metadata leaves update-type empty ('')
+            # and reports the bare 64-hex digest body as new-version
+            # (verified on PR #23; previous-version is empty under v3.1.0,
+            # so a previous==new gate would never fire). The log's "null"
+            # is display stringification — never compare against 'null'.
+            # Hex check proves digest-only: non-semver tags also report
+            # empty update-type but a non-hex new-version (fail closed).
+            eligible=true
+            reason="docker digest bump"
+          elif [ "$UPDATE_TYPE" = "version-update:semver-patch" ]; then
+            eligible=true
+            reason="semver-patch"
+          else
+            reason="update-type '${UPDATE_TYPE:-<empty>}' not eligible for $PACKAGE_ECOSYSTEM"
+          fi
+
+          {
+            echo "eligible=$eligible"
+            # Heredoc so a reason containing `=` or newlines cannot break
+            # the GITHUB_OUTPUT key=value parse (Codacy hardening).
+            echo "reason<<REASON_EOF"
+            echo "$reason"
+            echo "REASON_EOF"
+          } >> "$GITHUB_OUTPUT"
+          echo "Policy: eligible=$eligible ($reason)"
+
+      - name: Approve and enable auto-merge
+        if: steps.policy.outputs.eligible == 'true'
         env:
           # Untrusted input flows through env, never string-interpolated
           # into the run block — script-injection hardening per
