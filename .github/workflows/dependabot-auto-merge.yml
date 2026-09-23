@@ -289,7 +289,11 @@ jobs:
 
           {
             echo "eligible=$eligible"
-            echo "reason=$reason"
+            # Heredoc so a reason containing `=` or newlines cannot break
+            # the GITHUB_OUTPUT key=value parse (Codacy hardening).
+            echo "reason<<REASON_EOF"
+            echo "$reason"
+            echo "REASON_EOF"
           } >> "$GITHUB_OUTPUT"
           echo "Policy: eligible=$eligible ($reason)"
 
