@@ -28,10 +28,23 @@ updates:
     # the 7-day intent explicit. Security updates are never delayed.)
     cooldown:
       default-days: 7
+    # Split by update-type so fetch-metadata's roll-up `update-type` stays
+    # accurate: a single catch-all group reports the *highest* semver change
+    # in the PR, so one minor would block auto-merge of an all-patch group.
+    # Patch-only groups roll up to `version-update:semver-patch` and can
+    # match the auto-merge gate; minor/major groups fail closed.
     groups:
-      github-actions:
+      github-actions-patch:
         patterns:
           - "*"
+        update-types:
+          - patch
+      github-actions-minor-major:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - major
   - package-ecosystem: uv
     directory: /
     schedule:
@@ -46,10 +59,23 @@ updates:
     versioning-strategy: increase
     cooldown:
       default-days: 7
+    # Split by update-type so fetch-metadata's roll-up `update-type` stays
+    # accurate: a single catch-all group reports the *highest* semver change
+    # in the PR, so one minor would block auto-merge of an all-patch group.
+    # Patch-only groups roll up to `version-update:semver-patch` and can
+    # match the auto-merge gate; minor/major groups fail closed.
     groups:
-      uv:
+      uv-patch:
         patterns:
           - "*"
+        update-types:
+          - patch
+      uv-minor-major:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - major
   - package-ecosystem: docker
     directory: /.devcontainer
     schedule:

@@ -130,11 +130,12 @@
 #      exempted or the workflow's approval satisfies the requirement
 #      (known auto-merge + codeowners footgun):
 #        https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/defining-the-mergeability-of-pull-requests/troubleshooting-required-approvals
-#   5. `.github/dependabot.yml` currently groups every uv / github-actions
-#      update into one PR (`patterns: ["*"]`). Grouped PRs report an empty
-#      or ambiguous `update-type` from fetch-metadata, so the gate below
-#      fails closed and they will NOT auto-merge — split groups by
-#      `update-types` (or ungroup) if you want auto-merge to actually fire:
+#   5. `.github/dependabot.yml` splits uv / github-actions groups by
+#      `update-types` (patch vs minor+major). fetch-metadata rolls
+#      `update-type` up to the highest semver in the PR, so a patch-only
+#      group reports `version-update:semver-patch` and can match the gate
+#      below; minor/major groups roll up higher and fail closed to human
+#      review:
 #        https://docs.github.com/en/code-security/dependabot/working-with-dependabot/dependabot-groups
 
 name: Dependabot auto-merge
@@ -194,8 +195,10 @@ jobs:
       #     tutorial gate and the prometheus / hashicorp/* pattern; minors
       #     and majors change API surface and may introduce transitive deps
       #     or license changes, so they require human review.
-      #   * grouped PRs (empty `update-type`) fail this condition closed —
-      #     they fall through to human review rather than merging blind.
+      #   * fetch-metadata rolls `update-type` up to the highest semver in
+      #     the PR. Patch-only groups (see dependabot.yml `update-types`)
+      #     roll up to `semver-patch` and match; minor/major groups roll up
+      #     higher and fail this condition closed to human review.
       #
       # Patch-only does NOT stop a *malicious* patch release — event-stream
       # (2018), ua-parser-js (2021, CVE-2021-4229 / CISA alert), and
