@@ -31,6 +31,14 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # Direct deps in pyproject.toml use bare lower bounds (>=X.Y.Z). Without
+    # this, Dependabot's default strategy only bumps uv.lock whenever the new
+    # version still satisfies the existing bound, so core deps drift in the
+    # lockfile while the manifest keeps stale minimums (e.g. PR #20: openai
+    # 3.8.0 -> 3.13.0 with no pyproject.toml change). `increase` raises the
+    # lower bound in pyproject.toml alongside the lockfile on every update.
+    # See https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-dependabot.yml#versioning-strategy
+    versioning-strategy: increase
     cooldown:
       default-days: 7
     groups:
