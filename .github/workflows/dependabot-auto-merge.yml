@@ -90,15 +90,18 @@
 #     intermittent, not universal, coverage. The Dockerfile pins
 #     `tag@digest` so the version stays visible next to the content pin
 #     and Dependabot updates both together.
-#   * `pre-commit` `semver-minor` auto-merges: these are lint/tooling pins
-#     that run only in CI — a bad bump fails checks red instead of
-#     shipping. Runtime (`uv`) minors stay human-gated because this repo
-#     is dense with pre-1.0 deps where semver clause 4 allows "minor"
-#     releases to break, and majors are never auto-merged anywhere
-#     (GitHub staff declined built-in auto-merge for this reason —
-#     dependabot/feedback#253).
-#   * Everything else (uv/pre-commit minors outside the rule above,
-#     all majors, non-semver tags) fails closed to human review.
+#   * `pre-commit` is never auto-merged (patch or minor): required CI
+#     does not exercise the full hook set, so a bad bump could green-check
+#     and merge unexercised. Evidence in this repo: prek-action SKIPs
+#     markdownlint-cli2/actionlint (ci.yml), zizmor/osv-scanner run only
+#     at pre-push (never in CI), and path filters skip lint jobs entirely
+#     for Dockerfile-only PRs. Runtime (`uv`) minors stay human-gated
+#     because this repo is dense with pre-1.0 deps where semver clause 4
+#     allows "minor" releases to break, and majors are never auto-merged
+#     anywhere (GitHub staff declined built-in auto-merge for this reason
+#     — dependabot/feedback#253).
+#   * Everything else (uv patches via semver-patch, all majors, non-semver
+#     tags, docker non-digest) fails closed to human review.
 #
 # - Enforced via `gh pr merge --auto`, which *queues* the merge and only
 #   completes once branch protection (required checks/reviews) is satisfied;
@@ -261,9 +264,12 @@ jobs:
 
           if [ "$PACKAGE_ECOSYSTEM" = "github-actions" ]; then
             reason="github-actions ecosystem is never auto-merged"
-          elif [ "$UPDATE_TYPE" = "version-update:semver-patch" ]; then
-            eligible=true
-            reason="semver-patch"
+          elif [ "$PACKAGE_ECOSYSTEM" = "pre-commit" ]; then
+            # Required CI does not run the full hook set (prek SKIP list,
+            # pre-push-only zizmor/osv-scanner, path-filtered lint jobs),
+            # so exclude the whole ecosystem before the generic
+            # semver-patch branch — patches have the same hole as minors.
+            reason="pre-commit hooks are not fully exercised by required CI"
           elif [ "$PACKAGE_ECOSYSTEM" = "docker" ] && [ -z "$UPDATE_TYPE" ] && [[ "$NEW_VERSION" =~ ^[0-9a-f]{64}$ ]]; then
             # Digest bumps: fetch-metadata leaves update-type empty ('')
             # and reports the bare 64-hex digest body as new-version
@@ -274,10 +280,9 @@ jobs:
             # empty update-type but a non-hex new-version (fail closed).
             eligible=true
             reason="docker digest bump"
-          elif [ "$PACKAGE_ECOSYSTEM" = "pre-commit" ] && [ "$UPDATE_TYPE" = "version-update:semver-minor" ]; then
-            # Tooling-only pins: a bad bump fails CI red, does not ship.
+          elif [ "$UPDATE_TYPE" = "version-update:semver-patch" ]; then
             eligible=true
-            reason="pre-commit semver-minor"
+            reason="semver-patch"
           else
             reason="update-type '${UPDATE_TYPE:-<empty>}' not eligible for $PACKAGE_ECOSYSTEM"
           fi
