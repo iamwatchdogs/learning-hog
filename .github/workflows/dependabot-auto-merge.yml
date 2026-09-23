@@ -2,12 +2,18 @@
 #
 # Design notes — each decision below cites the doc or incident that drove it:
 #
-# - `pull_request` (not `pull_request_target`): this job never checks out or
-#   executes PR code — it only reads metadata and calls the GitHub API — so
-#   it does not need the base-ref elevated trust of `pull_request_target`.
-#   `pull_request_target` grants secrets + a write-capable token in the base
-#   repo context; combining it with a checkout of the PR head is the classic
-#   "pwn request" pattern GitHub warns against:
+# - `pull_request_target` (not `pull_request`): Dependabot-triggered
+#   `pull_request` runs force GITHUB_TOKEN to read-only regardless of the
+#   job's `permissions:` block, so `gh pr review --approve` and
+#   `gh pr merge --auto` cannot succeed. `pull_request_target` runs in the
+#   base-repo context with a write-capable token — the pattern
+#   `dependabot/fetch-metadata` recommends for this write path:
+#     https://github.com/dependabot/fetch-metadata#readme
+#     https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-on-actions
+#   Safe here because this job never checks out or executes PR code (see
+#   "No `actions/checkout`" below) — the classic "pwn request" pattern
+#   GitHub warns against requires combining this trigger with a checkout of
+#   the PR head, which this workflow deliberately omits:
 #     https://docs.github.com/en/actions/reference/security/securely-using-pull_request_target
 #
 # - `permissions: {}` at the top, grants only at the job: any step added
@@ -141,7 +147,7 @@
 name: Dependabot auto-merge
 
 on:
-  pull_request:
+  pull_request_target: # zizmor: ignore[dangerous-triggers]
     branches: [main]
 
 # Deny-all default; scopes are granted per job below (matches zizmor.yml).
@@ -172,6 +178,8 @@ jobs:
       pull-requests: write # `gh pr review --approve` + enable auto-merge
       # Explicit raise required: Dependabot-triggered runs default to a
       # read-only token — https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-on-actions
+      # `pull_request_target` is what makes these scopes actually grant a
+      # write-capable token for Dependabot-authored PRs (see header).
 
     steps:
       # Gate 2 — structured metadata from GitHub's supported Dependabot
