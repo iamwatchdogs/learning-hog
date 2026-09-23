@@ -17,6 +17,19 @@
 # `cooldown.default-days: 7` delays version-update PRs until a release is a
 # week old, reducing the chance of ingesting a freshly compromised release.
 # Security updates are never delayed by cooldown.
+#
+# The `pre-commit` entry keeps the `rev:` pins in .pre-commit-config.yaml
+# fresh (ruff-pre-commit, pre-commit-hooks, markdownlint-cli2, actionlint,
+# zizmor-pre-commit, osv-scanner) — previously updated by hand since no
+# autoupdate workflow existed. Dependabot parses the config, skips
+# `repo: local` entries, and also bumps hook `additional_dependencies`
+# pins (gitleaks v8.30.1).
+# See https://github.blog/changelog/2026-03-10-dependabot-now-supports-pre-commit-hooks
+# fetch-metadata reports package-ecosystem `pre-commit` (branch-name
+# segment), so these PRs are not caught by the auto-merge workflow's
+# `github-actions` exclusion; update-type can be empty for non-semver
+# tags, but every rev here is a semver-style tag so the patch group below
+# still rolls up to `version-update:semver-patch`.
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -71,6 +84,32 @@ updates:
         update-types:
           - patch
       uv-minor-major:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - major
+  - package-ecosystem: pre-commit
+    directory: /
+    schedule:
+      interval: weekly
+    # Same 7-day stance as `github-actions`/`uv` above: version-update PRs
+    # wait until a release is a week old. Security updates are never delayed.
+    cooldown:
+      default-days: 7
+    # Split by update-type so fetch-metadata's roll-up `update-type` stays
+    # accurate: a single catch-all group reports the *highest* semver change
+    # in the PR, so one minor would block auto-merge of an all-patch group.
+    # Patch-only groups roll up to `version-update:semver-patch` and can
+    # match the auto-merge gate; minor/major groups fail closed. Updates on
+    # non-semver tags report no update-type and fall closed to human review.
+    groups:
+      pre-commit-patch:
+        patterns:
+          - "*"
+        update-types:
+          - patch
+      pre-commit-minor-major:
         patterns:
           - "*"
         update-types:
