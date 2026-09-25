@@ -17,7 +17,7 @@
 # does not exist on GHCR (uv images only switched from bookworm to trixie in
 # 0.8.11+), so builds could never have resolved it; the digest pin replaces
 # both the broken tag and the mutable-tag risk in one change.
-FROM ghcr.io/astral-sh/uv:0.12.18-python3.13-trixie-slim@sha256:8891323e7ddaddc86d08c91f8af845ac5774a07d6f98e6765883030e1ad16fbc
+FROM ghcr.io/astral-sh/uv:0.12.19-python3.13-trixie-slim@sha256:aba5f865793af9275ceaa06d30935dfc6db8b81969c9fb099b0ebca6396b189e
 
 # Prevent cross-filesystem warnings and enable bytecode compilation
 ENV UV_LINK_MODE=copy \
