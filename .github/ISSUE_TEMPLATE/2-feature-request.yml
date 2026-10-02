@@ -1,0 +1,99 @@
+name: Feature request
+description: Suggest an idea or an improvement for learning-hog.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Thank you for suggesting a feature
+
+        Lead with the problem you are trying to solve, not the solution you
+        have in mind. The clearest requests state the problem, the evidence
+        that it affects others, and what "done" looks like.
+
+  - type: checkboxes
+    id: existing-request
+    attributes:
+      label: Is there an existing request for this?
+      description: Please search to see if a similar feature request already exists.
+      options:
+        - label: I have searched the existing issues
+          required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem this feature would solve
+      description: A clear and concise description of the problem or limitation you are facing. Describe the problem, not the solution.
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence of the problem
+      description: >
+        How do you know this affects others? Real usage, links to
+        discussions, or concrete scenarios all count.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: Proposed solution
+      description: What would you like to happen? Describe the outcome you expect.
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance criteria
+      description: >
+        What must be true when this is done? Think of what a coding agent
+        or a new contributor could verify, such as specific commands that
+        must succeed or behaviors that must hold.
+      placeholder: |
+        - [ ] `learning-hog ...` does X
+        - [ ] Tests cover Y
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Willingness to contribute
+      description: You do not need to contribute to submit a request, but it helps to know.
+      options:
+        - label: I am willing to help implement this feature
+
+  - type: dropdown
+    id: ai-assistance
+    attributes:
+      label: AI assistance
+      description: >
+        Disclosure required: name the tool(s) used for this issue, if any.
+        AI-assisted content must be reviewed and edited by a human before
+        submission. Undisclosed AI assistance may get the issue closed.
+      multiple: true
+      options:
+        - No AI assistance
+        - Claude Code
+        - GitHub Copilot
+        - Cursor
+        - Other (named below)
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Anything else we should know, including which AI tool you used when "Other (named below)" is selected.
+
+  - type: checkboxes
+    id: code-of-conduct
+    attributes:
+      label: Code of Conduct
+      description: By submitting this issue, you agree to follow our [Code of Conduct](https://github.com/iamwatchdogs/learning-hog/blob/main/CODE_OF_CONDUCT.md).
+      options:
+        - label: I agree to follow this project's Code of Conduct
+          required: true
