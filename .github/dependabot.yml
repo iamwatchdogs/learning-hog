@@ -18,6 +18,17 @@
 # week old, reducing the chance of ingesting a freshly compromised release.
 # Security updates are never delayed by cooldown.
 #
+# `uv` + `pip` are bundled into one multi-ecosystem group (`python`, see
+# below) so concurrent PRs from the two ecosystems cannot race each other on
+# pyproject.toml. Even bundled, the uv ecosystem often only rewrites uv.lock
+# while pyproject.toml keeps stale lower bounds (PR #20, PR #27;
+# dependabot/dependabot-core#14908). The durable fix is the two-workflow
+# ganzua sync: `.github/workflows/dependabot-constraints-bump.yml` (stage 1,
+# read-only) + `dependabot-constraints-push.yml` (stage 2, write) lift any
+# lagging `>=X.Y.Z` bounds to match uv.lock and push the fix onto the
+# Dependabot PR branch. `tests/test_manifest_lock_bounds.py` remains the
+# fail-closed CI backstop if both mechanisms miss.
+#
 # The `pre-commit` entry keeps the `rev:` pins in .pre-commit-config.yaml
 # fresh (ruff-pre-commit, pre-commit-hooks, markdownlint-cli2, actionlint,
 # zizmor-pre-commit, osv-scanner) — previously updated by hand since no
@@ -31,6 +42,20 @@
 # see the merge-policy header in dependabot-auto-merge.yml. Groups below
 # only control PR packaging, not merge eligibility.
 version: 2
+
+# Consolidates the `uv` and `pip` entries below into a single weekly PR so
+# the two ecosystems edit pyproject.toml / uv.lock together instead of
+# racing on separate branches. Each participating ecosystem must set
+# `multi-ecosystem-group` to the same name and define `patterns`
+# (required; ["*"] opts in every dependency in that ecosystem):
+#   https://docs.github.com/en/code-security/dependabot/working-with-dependabot/configuring-multi-ecosystem-updates
+# Schedule lives here for the consolidated group; each ecosystem entry
+# keeps its own `schedule` (schema requirement) in sync with this one.
+multi-ecosystem-groups:
+  python:
+    schedule:
+      interval: weekly
+
 updates:
   - package-ecosystem: github-actions
     directory: /
@@ -60,35 +85,49 @@ updates:
           - major
   - package-ecosystem: uv
     directory: /
+    multi-ecosystem-group: python
+    patterns: ["*"]
     schedule:
       interval: weekly
-    # Direct deps in pyproject.toml use bare lower bounds (>=X.Y.Z). Without
-    # this, Dependabot's default strategy only bumps uv.lock whenever the new
-    # version still satisfies the existing bound, so core deps drift in the
-    # lockfile while the manifest keeps stale minimums (e.g. PR #20: openai
-    # 3.8.0 -> 3.13.0 with no pyproject.toml change). `increase` raises the
-    # lower bound in pyproject.toml alongside the lockfile on every update.
+    # Direct deps in pyproject.toml use bare lower bounds (>=X.Y.Z). `increase`
+    # asks Dependabot to raise the lower bound alongside uv.lock.
+    #
+    # Known gap (PR #20, PR #27): the uv ecosystem often only rewrites uv.lock
+    # when the existing range still accepts the new version — packages not on
+    # PyPI with a `description` are also misclassified as libraries
+    # (dependabot/dependabot-core#14908), which suppresses manifest bumps.
+    # Do not assume this setting alone keeps pyproject.toml in sync; the
+    # ganzua workflows (see header) are the durable fix, and
+    # tests/test_manifest_lock_bounds.py fails CI on residual drift.
     # See https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-dependabot.yml#versioning-strategy
     versioning-strategy: increase
     cooldown:
       default-days: 7
-    # Split by update-type so fetch-metadata's roll-up `update-type` stays
-    # accurate: a single catch-all group reports the *highest* semver change
-    # in the PR, so one minor would block auto-merge of an all-patch group.
-    # Patch-only groups roll up to `version-update:semver-patch` and can
-    # match the auto-merge gate; minor/major groups fail closed.
-    groups:
-      uv-patch:
-        patterns:
-          - "*"
-        update-types:
-          - patch
-      uv-minor-major:
-        patterns:
-          - "*"
-        update-types:
-          - minor
-          - major
+    # Nested `groups:` (the old uv-patch / uv-minor-major split) removed when
+    # this entry joined multi-ecosystem-group `python`: interactions between
+    # nested version groups and multi-ecosystem groups are not fully
+    # documented, and multi-ecosystem packaging already coarsens PRs.
+    # Side effect on auto-merge: fetch-metadata rolls `update-type` up to
+    # the highest semver in the consolidated PR, so a mixed patch+minor
+    # `python` PR fails closed to human review (accepted; pure-patch weeks
+    # still roll up to semver-patch and auto-merge as before).
+  - package-ecosystem: pip
+    directory: /
+    multi-ecosystem-group: python
+    patterns: ["*"]
+    schedule:
+      interval: weekly
+    # The pip ecosystem updates PEP 621 bounds in pyproject.toml directly,
+    # covering the manifest half of the drift the uv ecosystem skips (it
+    # reads [project.dependencies] / [dependency-groups] when no
+    # requirements.txt exists). Bundled with `uv` via multi-ecosystem-group
+    # `python` so both halves land in one PR instead of conflicting.
+    # Same `increase` intent and 7-day cooldown as `uv` above.
+    # Security updates are never delayed by cooldown.
+    # See https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-dependabot.yml#versioning-strategy
+    versioning-strategy: increase
+    cooldown:
+      default-days: 7
   - package-ecosystem: pre-commit
     directory: /
     schedule:
