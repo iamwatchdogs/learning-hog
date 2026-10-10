@@ -212,15 +212,17 @@ Hooks are split across two git stages (see `default_install_hook_types` and
     committed with hooks skipped are still blocked before they leave the
     machine.
 
-After cloning (or rebuilding the container), enable both stages:
+`post-install.sh` runs `prek install` during container setup, so both stages
+are enabled automatically after a container build:
 
 ```bash
 prek install
 ```
 
-> ⚠️ Hooks only run if you have installed them. `prek install` writes the git
+> ⚠️ Hooks only run if the git shims are installed. `prek install` writes the
 > shims for both stages; without it, no local checks fire on commit or push.
-> Consider adding `prek install` to `.devcontainer/post-install.sh`.
+> The container setup handles this; if you cloned the repo outside the
+> container, run `prek install` yourself.
 
 ### Skipping a hook (escape hatch)
 

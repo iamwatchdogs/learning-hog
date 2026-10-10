@@ -53,6 +53,12 @@ uv tool install prek
 echo "📦 Installing dependencies with uv sync..."
 uv sync --locked --all-groups
 
+# Activate the prek hook shims for both stages (pre-commit and pre-push).
+# Without this step no local checks fire on commit or push; the dev container
+# README documents the two-stage hook setup.
+echo "🪝 Activating pre-commit hooks..."
+prek install
+
 # Verify the installation
 echo "✅ Verifying installation..."
 uv run python --version
