@@ -1,0 +1,166 @@
+# Stage 2 of the Dependabot pyproject.toml / uv.lock bounds sync (write pass).
+#
+# Stage 1 (`dependabot-constraints-bump.yml`) runs read-only on
+# `pull_request` — Dependabot-triggered runs get a read-only GITHUB_TOKEN
+# regardless of `permissions:`, so it cannot push. This stage fires on
+# `workflow_run` completion of that workflow. `workflow_run` is NOT on
+# GitHub's restricted-event list for Dependabot, so it receives a
+# write-capable token when `contents: write` is granted:
+#   https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-on-actions
+#
+# Design notes — each decision cites the incident or doc behind it:
+#
+# - `workflow_run` is a dangerous trigger (zizmor `dangerous-triggers`).
+#   The ignore comment below documents the mitigations that make it safe
+#   here:
+#     1. Workflow *definitions* for `workflow_run` always come from the
+#        default branch (GitHub platform rule) — never from the PR head —
+#        so this write-token job cannot be modified by the triggering run.
+#     2. Stage 1 itself is gated on `dependabot[bot]` + this repository, and
+#        its only outputs are `pyproject.toml` / `uv.lock` **data files**
+#        (artifact), not executable code. This stage never runs
+#        PR-supplied scripts; it copies two text files and commits them.
+#     3. Head-repository equality + `dependabot/` branch-prefix gates ensure
+#        we only ever push to this repository's Dependabot branches — never
+#        a fork, never a human branch (same guard GitHub's Dependabot
+#        auto-merge tutorial uses).
+#   Precedent for this exact ignore pattern: `default-assignee.yml`.
+#
+# - `permissions: {}` at the top, grants only at the job: any step added
+#   later that forgets a `permissions:` block gets nothing. The job needs
+#   `actions: read` (download-artifact from the stage-1 run) and
+#   `contents: write` (push to the Dependabot branch).
+#
+# - `persist-credentials: false` on checkout (zizmor `artipacked`): the
+#   push step injects the token for that one `git push` via
+#   `http.extraheader` (the same mechanism `actions/checkout` itself uses)
+#   instead of leaving a long-lived credential in `.git/config`.
+#
+# - Checkout never takes `workflow_run.head_branch` as `ref:` (Codacy
+#   workflow_run pwn-request gate). actions/checkout uses the default ref;
+#   the Dependabot head is fetched with git from env after the job gates
+#   above — still only data files, still same-repo / dependabot/ only.
+#
+# - Loop safety / termination: if stage 1 uploaded no artifact (bounds
+#   already in sync — the steady state after the first repair), download
+#   fails soft (`continue-on-error`) and this job exits without pushing.
+#   The re-trigger from any push then finds nothing to change, uploads no
+#   artifact, and the cycle ends.
+#
+# - Commits as `github-actions[bot]` with an explicit message so the push
+#   appears on the Dependabot PR for review / auto-merge re-evaluation.
+
+name: Dependabot constraints push
+
+on:
+  workflow_run: # zizmor: ignore[dangerous-triggers]
+    workflows: ["Dependabot constraints bump"]
+    types: [completed]
+
+# Deny-all default; scopes are granted per job below (matches zizmor.yml).
+# Rationale: https://docs.github.com/en/actions/reference/security/security-hardening-for-github-actions#setting-permissions-for-github_token
+permissions: {}
+
+concurrency:
+  # One push attempt per stage-1 run; a re-run of the same source run
+  # cancels a stale in-flight push instead of racing it.
+  group: dependabot-constraints-push-${{ github.event.workflow_run.id }}
+  cancel-in-progress: true
+
+jobs:
+  push:
+    name: Push synced bounds to Dependabot PR
+    # Gate — stage-1 outcome + scope (see header for each clause):
+    #   * conclusion == success: stage 1 actually finished and found drift
+    #     to repair (cancelled/failed runs never push).
+    #   * event == pull_request: stage 1 only runs on PRs; guards against
+    #     future edits reusing this workflow name for other events.
+    #   * head_repository == github.repository: same-repo only (fork guard).
+    #   * head_branch starts with dependabot/: never push to a human branch
+    #     even if the other clauses somehow pass.
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      startsWith(github.event.workflow_run.head_branch, 'dependabot/')
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read   # download-artifact from the stage-1 run
+      contents: write # push the synced files to the Dependabot branch
+
+    steps:
+      # continue-on-error: stage 1 omits the artifact when bounds were
+      # already in sync (the loop-termination signal documented in the
+      # header). Absent artifact → outcome != success → skip the push.
+      - name: Download synced files
+        id: artifact
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: constraints-sync
+          # Pull from the stage-1 run that completed, not this run's (empty)
+          # artifact set.
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: synced
+
+      - name: Checkout repository
+        if: steps.artifact.outcome == 'success'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Default ref only (this workflow's commit / default branch).
+          # Never pass `workflow_run.head_branch` to actions/checkout —
+          # static scanners flag that pairing as a pwn-request. The
+          # Dependabot head is fetched via git from env below after the
+          # job-level gates, so incoming PR code is never handed to the
+          # privileged checkout path.
+          # Credentials are NOT persisted (zizmor artipacked); the push step
+          # below injects the token for that single call instead.
+          persist-credentials: false
+
+      - name: Fetch Dependabot branch
+        if: steps.artifact.outcome == 'success'
+        env:
+          # Same gates as the job `if:`; untrusted context only via env.
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          set -euo pipefail
+          # Job-level gates already require head_repository == this repo
+          # and a dependabot/ prefix. Data files only are ever copied from
+          # this ref — no PR-supplied scripts are executed.
+          git fetch --no-tags --depth=1 origin \
+            "refs/heads/${BRANCH}:refs/heads/${BRANCH}"
+          git checkout "${BRANCH}"
+
+      - name: Commit and push
+        if: steps.artifact.outcome == 'success'
+        env:
+          # Untrusted context flows through env, never string-interpolated
+          # into the run block — script-injection hardening per
+          # https://docs.github.com/en/actions/reference/security/security-hardening-for-github-actions#github_token-and-script-injection
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          cp synced/pyproject.toml pyproject.toml
+          cp synced/uv.lock uv.lock
+
+          if git diff --quiet -- pyproject.toml uv.lock; then
+            echo "Branch already in sync; nothing to push."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pyproject.toml uv.lock
+          git commit -m "chore: raise pyproject.toml bounds to match uv.lock"
+          git diff --stat HEAD~1 HEAD
+
+          # One-shot auth for this push only (persist-credentials is false):
+          # inject GITHUB_TOKEN via http.extraheader, the same mechanism
+          # actions/checkout uses internally, so no credential is written
+          # into .git/config for later steps or artifacts to pick up.
+          auth="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth}" \
+            push origin "HEAD:refs/heads/${BRANCH}"
